@@ -269,11 +269,12 @@ greedy.
 
 ### 5.3. Directorio de trabajo
 
-El programa busca las instancias en `./instancias2/` (ruta relativa), que en
+El programa busca las instancias en `./instancias2/`, que en
 Visual Studio por defecto se resuelve contra la carpeta del `.vcxproj` (no
-contra `Debug/` o `x64/Debug/`). Puedes confirmarlo o cambiarlo en
-*Propiedades del proyecto → Depuración → Directorio de trabajo*. Los
-resultados se guardan automáticamente en `./resultados/` y como CSVs sueltos
+contra `Debug/` o `x64/Debug/`). Todas las instancias se encuentran dentro de la carpeta 
+`./instancias/`, para analizar una instancia en específico se debe copiar en `./instancias2/`.
+Puedes confirmarlo o cambiarlo en *Propiedades del proyecto → Depuración → Directorio de trabajo*.
+Los resultados se guardan automáticamente en `./resultados/` y como CSVs sueltos
 (`rutas_*.csv`, `trayectoria_*.csv`, `comparacion_*.csv`) en ese mismo
 directorio.
 
