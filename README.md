@@ -18,7 +18,7 @@ recargas parciales en las estaciones (EVRPTW-PR).
 > caché de costos, formato de instancias) son propias de este proyecto. Si
 > algo del comportamiento no coincide exactamente con lo que describe el
 > paper, es intencional o producto de una simplificación práctica, no un bug
-> por default — pero siempre vale la pena revisar el paper si algo no cuadra.
+> por default, por lo tanto, es recomendable revisar el paper.
 
 ---
 
