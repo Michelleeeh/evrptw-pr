@@ -19,28 +19,28 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW.h" />
-    <ClInclude Include="..\..\..\..\Downloads\ALNS_EVRPTW\ConfigALNS.h" />
-    <ClInclude Include="..\..\..\..\Downloads\ALNS_EVRPTW\InstanciaReader.h" />
-    <ClInclude Include="..\..\..\..\Downloads\ALNS_EVRPTW\Nodo.h" />
-    <ClInclude Include="..\..\..\..\Downloads\ALNS_EVRPTW\Ruta.h" />
+    <ClInclude Include="ALNS_EVRPTW.h" />
+    <ClInclude Include="ConfigALNS.h" />
+    <ClInclude Include="InstanciaReader.h" />
+    <ClInclude Include="Nodo.h" />
+    <ClInclude Include="Ruta.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_Algoritmo.cpp" />
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_Auxiliares.cpp" />
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_Core.cpp" />
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_InsercionClientes.cpp" />
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_InsercionEstaciones.cpp" />
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_RemocionClientes.cpp" />
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_RemocionEstaciones.cpp" />
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_RemocionRutas.cpp" />
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_SetCovering.cpp" />
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\InstanciaReader.cpp" />
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\main.cpp" />
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\Ruta.cpp" />
+    <ClCompile Include="ALNS_EVRPTW_Algoritmo.cpp" />
+    <ClCompile Include="ALNS_EVRPTW_Auxiliares.cpp" />
+    <ClCompile Include="ALNS_EVRPTW_Core.cpp" />
+    <ClCompile Include="ALNS_EVRPTW_InsercionClientes.cpp" />
+    <ClCompile Include="ALNS_EVRPTW_InsercionEstaciones.cpp" />
+    <ClCompile Include="ALNS_EVRPTW_RemocionClientes.cpp" />
+    <ClCompile Include="ALNS_EVRPTW_RemocionEstaciones.cpp" />
+    <ClCompile Include="ALNS_EVRPTW_RemocionRutas.cpp" />
+    <ClCompile Include="ALNS_EVRPTW_SetCovering.cpp" />
+    <ClCompile Include="InstanciaReader.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="Ruta.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\..\..\Downloads\ALNS_EVRPTW\README.md" />
+    <None Include="README.md" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>

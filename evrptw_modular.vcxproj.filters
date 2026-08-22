@@ -15,62 +15,62 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW.h">
+    <ClInclude Include="ALNS_EVRPTW.h">
       <Filter>Archivos de encabezado</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\Downloads\ALNS_EVRPTW\ConfigALNS.h">
+    <ClInclude Include="ConfigALNS.h">
       <Filter>Archivos de encabezado</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\Downloads\ALNS_EVRPTW\InstanciaReader.h">
+    <ClInclude Include="InstanciaReader.h">
       <Filter>Archivos de encabezado</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\Downloads\ALNS_EVRPTW\Nodo.h">
+    <ClInclude Include="Nodo.h">
       <Filter>Archivos de encabezado</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\Downloads\ALNS_EVRPTW\Ruta.h">
+    <ClInclude Include="Ruta.h">
       <Filter>Archivos de encabezado</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_Algoritmo.cpp">
+    <ClCompile Include="ALNS_EVRPTW_Algoritmo.cpp">
       <Filter>Archivos de origen</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_Auxiliares.cpp">
+    <ClCompile Include="ALNS_EVRPTW_Auxiliares.cpp">
       <Filter>Archivos de origen</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_Core.cpp">
+    <ClCompile Include="ALNS_EVRPTW_Core.cpp">
       <Filter>Archivos de origen</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_InsercionClientes.cpp">
+    <ClCompile Include="ALNS_EVRPTW_InsercionClientes.cpp">
       <Filter>Archivos de origen</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_InsercionEstaciones.cpp">
+    <ClCompile Include="ALNS_EVRPTW_InsercionEstaciones.cpp">
       <Filter>Archivos de origen</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_RemocionClientes.cpp">
+    <ClCompile Include="ALNS_EVRPTW_RemocionClientes.cpp">
       <Filter>Archivos de origen</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_RemocionEstaciones.cpp">
+    <ClCompile Include="ALNS_EVRPTW_RemocionEstaciones.cpp">
       <Filter>Archivos de origen</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_RemocionRutas.cpp">
+    <ClCompile Include="ALNS_EVRPTW_RemocionRutas.cpp">
       <Filter>Archivos de origen</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\ALNS_EVRPTW_SetCovering.cpp">
+    <ClCompile Include="ALNS_EVRPTW_SetCovering.cpp">
       <Filter>Archivos de origen</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\InstanciaReader.cpp">
+    <ClCompile Include="InstanciaReader.cpp">
       <Filter>Archivos de origen</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\main.cpp">
+    <ClCompile Include="main.cpp">
       <Filter>Archivos de origen</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\Downloads\ALNS_EVRPTW\Ruta.cpp">
+    <ClCompile Include="Ruta.cpp">
       <Filter>Archivos de origen</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\..\..\Downloads\ALNS_EVRPTW\README.md">
+    <None Include="README.md">
       <Filter>Archivos de encabezado</Filter>
     </None>
   </ItemGroup>
