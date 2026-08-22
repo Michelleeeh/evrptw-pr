@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="evrptw_modular.vcxproj" Id="0e5bc9c4-53a9-4784-b738-1c11c14d7405" />
+</Solution>
