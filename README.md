@@ -141,11 +141,11 @@ estación de recarga antes del punto de falla (ver `probar_insercion` y
 
 ### 2.6. Operadores de inserción de estaciones
 
-`ALNS_EVRPTW_InsercionEstaciones.cpp`: tres variantes (`greedy`,
-`greedy_..._comparison`, `best_station_insertion`) que localizan el primer
-punto de la ruta donde la batería se vuelve negativa y prueban insertar la
-estación que menos distancia añade, comparando distintas posiciones hacia
-atrás en la ruta.
+`ALNS_EVRPTW_InsercionEstaciones.cpp`:
+
+- **`greedy_station_insertion`**: busca solo la posición justo antes del fallo de batería y prueba ahí todas las estaciones, quedándose con la de menor costo.
+- **`greedy_station_insertion_comparison`**: prueba todas las posiciones desde el fallo hasta el inicio de la ruta con todas las estaciones — la búsqueda más exhaustiva de las tres.
+- **`best_station_insertion`**: retrocede solo hasta el último punto de recarga previo (no hasta el inicio de la ruta), un balance entre exhaustividad y velocidad.
 
 ### 2.7. Criterio de aceptación (Simulated Annealing)
 
