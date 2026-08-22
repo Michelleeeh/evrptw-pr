@@ -18,7 +18,7 @@ recargas parciales en las estaciones (EVRPTW-PR).
 > caché de costos, formato de instancias) son propias de este proyecto. Si
 > algo del comportamiento no coincide exactamente con lo que describe el
 > paper, es intencional o producto de una simplificación práctica, no un bug
-> por default, por lo tanto, es recomendable revisar el paper.
+> por default. Por lo tanto, es recomendable revisar el paper.
 
 ---
 
@@ -200,12 +200,6 @@ proyecto para exprimir más valor del historial de búsqueda.
 | `ALNS_EVRPTW_Auxiliares.cpp` | Funciones privadas de apoyo (construcción inicial, aceptación, pesos, etc.). |
 | `main.cpp` | Punto de entrada: recorre instancias, corre el ALNS, guarda resultados. |
 
-**Si vas a trabajar en el ALNS**, los archivos que más te interesan son los de
-`Remocion*`, `Insercion*` y `ALNS_EVRPTW_Algoritmo.cpp` (el ciclo principal
-está ahí, con la lógica de qué operador se usa en cada iteración). El archivo
-`ALNS_EVRPTW.h` es donde hay que declarar cualquier operador nuevo antes de
-implementarlo.
-
 ---
 
 ## 4. Formato de las instancias
@@ -320,7 +314,7 @@ suficiente para la convergencia).
 
 Keskin, M., & Çatay, B. (2016). *Partial Recharge Strategies for the Electric
 Vehicle Routing Problem with Time Windows.* Transportation Research Part C:
-Emerging Technologies.
+Emerging Technologies. [Link](https://www.researchgate.net/publication/297584057_Partial_Recharge_Strategies_for_the_Electric_Routing_Problem_with_Time_Windows)
 
 El problema base (EVRPTW sin recarga parcial) fue introducido originalmente
 por:
