@@ -12,7 +12,7 @@
 
 using namespace std;
 
-void ALNS_EVRPTW::ejecutar(int iteraciones, string nombre_instancia) {
+void ALNS_EVRPTW::ejecutar(int iteraciones, string nombre_instancia, string carpeta_salida) {
     cout << "Generando solucion inicial (Constructor Dinamico)..." << endl;
 
     inicializar_solucion();
@@ -27,7 +27,7 @@ void ALNS_EVRPTW::ejecutar(int iteraciones, string nombre_instancia) {
     double alpha = config.alpha_enfriamiento;
 
     string sufijo = nombre_instancia + "_" + config.nombre_variante;
-    ofstream out_trayectoria("trayectoria_" + sufijo + ".csv");
+    ofstream out_trayectoria(carpeta_salida + "trayectoria_" + sufijo + ".csv");
 
     cout << "Simulated Annealing -> Temp Inicial: " << T << " | Enfriamiento: " << alpha << endl;
     cout << "Comenzando optimizacion ALNS (" << iteraciones << " iteraciones)...\n" << endl;
@@ -147,7 +147,22 @@ void ALNS_EVRPTW::ejecutar(int iteraciones, string nombre_instancia) {
     cout << "Total viol bateria: " << total_viol_b << endl;
     cout << "Total viol capacidad: " << total_viol_c << endl;
 
-    cout << "\nPool de rutas acumuladas: " << pool_rutas.size() << endl;
+    // FRVCP: optimizar estaciones de la mejor solucion y del pool
+    // (segun flags en ConfigALNS).
+    if (config.usar_frvcp_en_final || config.usar_frvcp_en_pool) {
+        cout << "\n--- FRVCP (Fixed-Route Vehicle Charging Problem) ---" << endl;
+    }
+    if (config.usar_frvcp_en_final) {
+        int frvcp_sol = optimizar_solucion_con_frvcp(mejor_solucion);
+        cout << "  Rutas mejoradas en mejor_solucion: " << frvcp_sol
+             << " | Nueva distancia: " << obtener_distancia(mejor_solucion) << endl;
+    }
+    cout << "Pool de rutas acumuladas: " << pool_rutas.size() << endl;
+    if (config.usar_frvcp_en_pool) {
+        int frvcp_pool = optimizar_pool_con_frvcp();
+        cout << "  Rutas mejoradas en pool: " << frvcp_pool << endl;
+    }
+
     vector<Ruta> sol_matheuristica = resolver_set_covering_cpsat();
     int clientes_cubiertos = 0;
     for (const auto& r : sol_matheuristica)
@@ -179,15 +194,15 @@ void ALNS_EVRPTW::ejecutar(int iteraciones, string nombre_instancia) {
 
     // Exportamos las DOS versiones por separado, sin importar cual gano,
     // para poder comparar rutas visualmente.
-    exportar_rutas_de(sol_alns_pura, "rutas_" + nombre_instancia + "_ALNS.csv");
-    exportar_rutas_de(sol_matheuristica, "rutas_" + nombre_instancia + "_CPSAT.csv");
+    exportar_rutas_de(sol_alns_pura, carpeta_salida + "rutas_" + nombre_instancia + "_ALNS.csv");
+    exportar_rutas_de(sol_matheuristica, carpeta_salida + "rutas_" + nombre_instancia + "_CPSAT.csv");
 
     // La que quedo como "oficial" (mejor_solucion) tambien se exporta con el
     // nombre original, para no romper el resto del flujo/scripts existentes.
-    exportar_rutas("rutas_" + nombre_instancia + ".csv");
+    exportar_rutas(carpeta_salida + "rutas_" + nombre_instancia + ".csv");
 
     // CSV resumen comparando metricas de ambas soluciones lado a lado.
-    ofstream out_comparacion("comparacion_" + nombre_instancia + ".csv");
+    ofstream out_comparacion(carpeta_salida + "comparacion_" + nombre_instancia + ".csv");
     out_comparacion << "Metodo,Vehiculos,Distancia,GanoLaComparacion\n";
     out_comparacion << "ALNS," << sol_alns_pura.size() << "," << obtener_distancia(sol_alns_pura)
         << "," << (matheuristica_gano ? "No" : "Si") << "\n";

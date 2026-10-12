@@ -28,4 +28,11 @@ struct ConfigALNS {
     int n_RR = 1250;
     int N_c = 200;
     int N_s = 2500;
+
+    // FRVCP (ver ALNS_EVRPTW_FRVCP.cpp): reoptimiza estaciones/carga sobre
+    // una secuencia de clientes ya fija. Se puede activar por separado en
+    // cada punto de enganche para medir el efecto de cada uno.
+    bool usar_frvcp_en_final = false;  // aplicar sobre mejor_solucion al terminar
+    bool usar_frvcp_en_pool = false;   // aplicar sobre el pool antes del set-covering
+    int frvcp_k_candidatas = 5;       // estaciones candidatas evaluadas por tramo
 };

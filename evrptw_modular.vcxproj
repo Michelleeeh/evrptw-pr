@@ -29,6 +29,7 @@
     <ClCompile Include="ALNS_EVRPTW_Algoritmo.cpp" />
     <ClCompile Include="ALNS_EVRPTW_Auxiliares.cpp" />
     <ClCompile Include="ALNS_EVRPTW_Core.cpp" />
+    <ClCompile Include="ALNS_EVRPTW_FRVCP.cpp" />
     <ClCompile Include="ALNS_EVRPTW_InsercionClientes.cpp" />
     <ClCompile Include="ALNS_EVRPTW_InsercionEstaciones.cpp" />
     <ClCompile Include="ALNS_EVRPTW_RemocionClientes.cpp" />
@@ -150,7 +151,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);OR_PROTO_DLL=</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);OR_PROTO_DLL=;USE_ORTOOLS</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>C:\Users\black\OneDrive\Documentos\or-tools\include;C:\Users\black\OneDrive\Documentos\or-tools\build</AdditionalIncludeDirectories>

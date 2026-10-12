@@ -44,13 +44,21 @@ int main() {
     // los valores por defecto.
     vector<ConfigALNS> variantes;
 
-    ConfigALNS baseline;
-    baseline.nombre_variante = "baseline";
-    variantes.push_back(baseline);
+    ConfigALNS sin_frvcp;
+    sin_frvcp.nombre_variante = "sin_frvcp";
+    sin_frvcp.usar_frvcp_en_final = false;
+    sin_frvcp.usar_frvcp_en_pool = false;
+    variantes.push_back(sin_frvcp);
+
+    //ConfigALNS con_frvcp;
+    //con_frvcp.nombre_variante = "con_frvcp";
+    //con_frvcp.usar_frvcp_en_final = true;
+    //con_frvcp.usar_frvcp_en_pool = true;
+    //variantes.push_back(con_frvcp);
 
     // Semillas aleatorias con las que se repetira cada variante, para
     // poder promediar/comparar resultados entre corridas independientes.
-    vector<unsigned int> semillas = { 222 };
+    vector<unsigned int> semillas = { 111 };
 
     // Si no existe la carpeta de instancias, no hay nada que procesar.
     if (!fs::exists(carpeta_instancias)) {
@@ -75,9 +83,12 @@ int main() {
             continue;
         }
 
-        // Archivo CSV de resultados especifico de esta instancia, con una
-        // fila por cada combinacion (variante, semilla) ejecutada.
-        string archivo_salida_instancia = carpeta_salida + "resultados_" + nombre_instancia + ".csv";
+        // Crear subcarpeta propia para esta instancia: ./resultados/r107_21/
+        string carpeta_instancia = carpeta_salida + nombre_instancia + "/";
+        if (!fs::exists(carpeta_instancia)) fs::create_directory(carpeta_instancia);
+
+        // Archivo CSV de resultados especifico de esta instancia.
+        string archivo_salida_instancia = carpeta_instancia + "resultados_" + nombre_instancia + ".csv";
         ofstream out(archivo_salida_instancia);
         out << "Instancia,Variante,Semilla,Vehiculos,Distancia,Ultima_Mejora,Tiempo_Segundos\n";
 
@@ -91,7 +102,7 @@ int main() {
 
                 ALNS_EVRPTW alns(mapa, cc, cb, rc, rcons, config);
                 auto start_time = chrono::high_resolution_clock::now();
-                alns.ejecutar(25000, nombre_instancia);
+                alns.ejecutar(25000, nombre_instancia, carpeta_instancia);
                 auto end_time = chrono::high_resolution_clock::now();
                 chrono::duration<double> duration = end_time - start_time;
 
@@ -105,7 +116,7 @@ int main() {
         }
 
         out.close();
-        cout << "Resultados de " << nombre_instancia << " guardados en: " << archivo_salida_instancia << endl;
+        cout << "Resultados de " << nombre_instancia << " guardados en: " << carpeta_instancia << endl;
     }
 
     cout << "\nProceso completado. Resultados individuales en carpeta: " << carpeta_salida << endl;

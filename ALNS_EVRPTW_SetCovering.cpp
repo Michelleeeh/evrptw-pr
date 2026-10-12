@@ -38,7 +38,7 @@ vector<Ruta> ALNS_EVRPTW::resolver_greedy_set_covering() {
         double mejor_ratio = numeric_limits<double>::max();
 
         for (size_t j = 0; j < pool_rutas.size(); ++j) {
-            if (usada[j]) continue;
+            if (usada[j] || pool_rutas[j].clientes.empty()) continue;
             bool tiene_conflicto = false;
             for (int c : pool_rutas[j].clientes) {
                 if (cubierto[c]) { tiene_conflicto = true; break; }
@@ -122,7 +122,20 @@ vector<Ruta> ALNS_EVRPTW::resolver_set_covering_cpsat(double tiempo_limite_fase1
     using namespace operations_research;
     using namespace operations_research::sat;
 
-    int n = (int)pool_rutas.size();
+    // Filtramos las entradas invalidadas por registrar_rutas_en_pool (marcadas
+    // con clientes.clear() cuando se descartan por exceder K_VARIANTES_POR_GRUPO).
+    // Sin este filtro, pool_rutas.size() incluye miles de entradas "muertas"
+    // acumuladas durante toda la corrida del ALNS, y cada una generaba una
+    // BoolVar inutil en el modelo de CP-SAT, inflandolo innecesariamente.
+    vector<int> rutas_validas;
+    rutas_validas.reserve(pool_rutas.size());
+    for (int j = 0; j < (int)pool_rutas.size(); ++j) {
+        if (!pool_rutas[j].clientes.empty()) rutas_validas.push_back(j);
+    }
+
+    int n = (int)rutas_validas.size();
+    cout << "  [cpsat] Pool total=" << pool_rutas.size()
+        << " | rutas validas=" << n << endl;
     if (n == 0) return resolver_greedy_set_covering();
 
     auto construir_cobertura = [&](CpModelBuilder& modelo, vector<BoolVar>& x) {
@@ -131,8 +144,8 @@ vector<Ruta> ALNS_EVRPTW::resolver_set_covering_cpsat(double tiempo_limite_fase1
 
         map<int, vector<int>> cobertura;
         for (int j = 0; j < n; ++j) {
-            if (pool_rutas[j].clientes.empty()) continue;
-            for (int c : pool_rutas[j].clientes)
+            const auto& clientes = pool_rutas[rutas_validas[j]].clientes;
+            for (int c : clientes)
                 cobertura[c].push_back(j);
         }
 
@@ -178,10 +191,20 @@ vector<Ruta> ALNS_EVRPTW::resolver_set_covering_cpsat(double tiempo_limite_fase1
     for (int j = 0; j < n; ++j) num_rutas2 += x2[j];
     modelo2.AddLessOrEqual(num_rutas2, cota_vehiculos);
 
+    // Warm start: le damos a fase 2 la misma combinacion de rutas que encontro
+    // fase 1 como punto de partida. Sin esto, encontrar una solucion factible
+    // con el numero EXACTO de vehiculos (sin holgura) puede ser mucho mas dificil
+    // que la fase 1 (que solo necesitaba llegar a ese minimo, no acotarlo por
+    // arriba), y el solver puede agotar el tiempo sin hallar ninguna solucion
+    // (status UNKNOWN), lo cual el codigo trataba como infactible.
+    for (int j = 0; j < n; ++j) {
+        modelo2.AddHint(x2[j], SolutionBooleanValue(resp1, x1[j]) ? int64_t{ 1 } : int64_t{ 0 });
+    }
+
     const int64_t FACTOR = 1000;
     LinearExpr distancia_total;
     for (int j = 0; j < n; ++j) {
-        int64_t d_j = (int64_t)llround(pool_rutas[j].distancia * FACTOR);
+        int64_t d_j = (int64_t)llround(pool_rutas[rutas_validas[j]].distancia * FACTOR);
         distancia_total += x2[j] * d_j;
     }
     modelo2.Minimize(distancia_total);
@@ -199,7 +222,7 @@ vector<Ruta> ALNS_EVRPTW::resolver_set_covering_cpsat(double tiempo_limite_fase1
         for (int j = 0; j < n; ++j) {
             if (SolutionBooleanValue(resp2, x2[j])) {
                 Ruta r;
-                r.secuencia = pool_rutas[j].secuencia_completa;
+                r.secuencia = pool_rutas[rutas_validas[j]].secuencia_completa;
                 r.calcular_metricas(mapa, matriz_dist, CAP_BATT, CAP_CARGA, R_CARGA, R_CONSUMO, ID_DEPOSITO);
                 resultado.push_back(r);
             }
@@ -208,9 +231,12 @@ vector<Ruta> ALNS_EVRPTW::resolver_set_covering_cpsat(double tiempo_limite_fase1
             << " | distancia=" << obtener_distancia(resultado) << endl;
     }
     else {
-        cout << "  [cpsat] Fase 2 infactible, usando fallback greedy." << endl;
+        string motivo = (resp2.status() == CpSolverStatus::INFEASIBLE) ? "INFEASIBLE" : "UNKNOWN/timeout";
+        cout << "  [cpsat] Fase 2 no resuelta (status=" << motivo << "), usando fallback greedy." << endl;
         return resolver_greedy_set_covering();
     }
+
+    reparar_solapes_covering(resultado);
 
     // Fallback: clientes sin cobertura por pool insuficiente.
     unordered_set<int> cubiertos;

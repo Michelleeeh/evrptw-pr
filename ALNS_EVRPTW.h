@@ -144,7 +144,7 @@ public:
 
     /// Ejecuta el ciclo completo del ALNS durante `iteraciones` pasos y
     /// exporta la trayectoria y las rutas finales a archivos CSV.
-    void ejecutar(int iteraciones, std::string nombre_instancia);
+    void ejecutar(int iteraciones, std::string nombre_instancia, std::string carpeta_salida = "");
 
     /// Exporta la mejor solucion encontrada a un archivo CSV.
     void exportar_rutas(std::string filename);
@@ -152,12 +152,25 @@ public:
     /// Exporta cualquier vector<Ruta> (util para comparar soluciones).
     void exportar_rutas_de(const std::vector<Ruta>& sol, std::string filename);
 
+    /// Resuelve el FRVCP (Fixed-Route Vehicle Charging Problem) para una
+    /// secuencia fija de clientes: decide optimamente que estaciones visitar
+    /// y cuanto cargar en cada una mediante programacion dinamica.
+    Ruta resolver_frvcp(const std::vector<int>& clientes);
+
+    /// Aplica resolver_frvcp a cada ruta de una solucion, reemplazando las
+    /// que mejoran. Devuelve cuantas rutas fueron mejoradas.
+    int optimizar_solucion_con_frvcp(std::vector<Ruta>& sol);
+
+    /// Aplica resolver_frvcp a cada ruta valida del pool de la matheuristica.
+    /// Devuelve cuantas rutas fueron mejoradas.
+    int optimizar_pool_con_frvcp();
+
     /// Resuelve un set-covering greedy sobre el pool de rutas factibles.
     std::vector<Ruta> resolver_greedy_set_covering();
 
     /// Resuelve el set-covering sobre pool_rutas con CP-SAT en dos fases.
-    std::vector<Ruta> resolver_set_covering_cpsat(double tiempo_limite_fase1 = 20.0,
-        double tiempo_limite_fase2 = 30.0);
+    std::vector<Ruta> resolver_set_covering_cpsat(double tiempo_limite_fase1 = 90.0,
+        double tiempo_limite_fase2 = 60.0);
 
     /// Devuelve la distancia total recorrida por todas las rutas de `sol`.
     double obtener_distancia(const std::vector<Ruta>& sol) const;
@@ -179,6 +192,8 @@ private:
     bool aplicar_insercion(int r_idx, int pos, int nodo_id);
     void evaluar_y_aceptar(std::vector<Ruta>& backup, int op_rem, int op_ins, int op_sr, int op_si, int iteracion_actual);
     void actualizar_rutas_post_remocion(const std::vector<int>& fuera);
+    void eliminar_clientes_de_ruta(Ruta& ruta, const std::vector<int>& nodos_a_quitar);
+    void reparar_solapes_covering(std::vector<Ruta>& sol);
     void limpiar_rutas_vacias();
     int seleccionar_operador(const std::vector<double>& pesos);
     void actualizar_pesos_clientes();
