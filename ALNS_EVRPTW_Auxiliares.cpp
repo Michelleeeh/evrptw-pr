@@ -57,22 +57,17 @@ double ALNS_EVRPTW::probar_insercion(int r_idx, int pos, int u) {
 
     if (status == 0) return buffer_insercion.distancia_total - dist_original;
 
-    // Fallo de bateria: probar estaciones posicion por posicion.
-    // - Si nada funciona en una posicion, retrocede hasta MAX_POS posiciones.
-    // - Una vez encuentra alguna estacion que funciona, revisa EXTRA_POS
-    //   posiciones adicionales (por si hay una mejor) y luego sale.
-    // Esto da velocidad en el caso comun y mantiene calidad.
+    // Fallo de bateria: probar todas las estaciones en las MAX_POS posiciones
+    // mas cercanas al fallo, y quedarse con la mejor combinacion global.
     if (status == 1) {
         int idx_falla = -1;
         for (int i = 1; i < (int)buffer_insercion.secuencia.size(); ++i) {
             if (buffer_insercion.secuencia[i].llegada_bateria < -1e-9) { idx_falla = i; break; }
         }
         if (idx_falla != -1 && idx_falla >= 2) {
-            static const int MAX_POS = 8;
-            static const int EXTRA_POS = 2;
+            static const int MAX_POS = 10;
             double mejor_costo = numeric_limits<double>::max();
             int pos_min = max(1, idx_falla - MAX_POS);
-            int extra_restantes = -1; // -1 = aun no se encontro nada
 
             for (int p = idx_falla - 1; p >= pos_min; --p) {
                 for (int s : estaciones) {
@@ -80,14 +75,8 @@ double ALNS_EVRPTW::probar_insercion(int r_idx, int pos, int u) {
                     if (buffer_insercion.calcular_metricas(mapa, matriz_dist, CAP_BATT, CAP_CARGA, R_CARGA, R_CONSUMO, ID_DEPOSITO) == 0) {
                         double costo = buffer_insercion.distancia_total - dist_original;
                         if (costo < mejor_costo) mejor_costo = costo;
-                        if (extra_restantes < 0) extra_restantes = EXTRA_POS;
                     }
                     buffer_insercion.secuencia.erase(buffer_insercion.secuencia.begin() + p);
-                }
-                // Si ya encontramos algo, consumir presupuesto de posiciones extra.
-                if (extra_restantes >= 0) {
-                    if (extra_restantes == 0) break;
-                    extra_restantes--;
                 }
             }
             return mejor_costo;
@@ -192,12 +181,10 @@ bool ALNS_EVRPTW::aplicar_insercion(int r_idx, int pos, int nodo_id) {
             if (solucion_actual[r_idx].secuencia[i].llegada_bateria < 0) { idx_falla = i; break; }
         }
         if (idx_falla != -1 && idx_falla >= 2) {
-            static const int MAX_POS = 8;
-            static const int EXTRA_POS = 2;
+            static const int MAX_POS = 10;
             double mejor_dist = numeric_limits<double>::max();
             int mejor_estacion = -1, mejor_pos = -1;
             int pos_min = max(1, idx_falla - MAX_POS);
-            int extra_restantes = -1;
 
             for (int p = idx_falla - 1; p >= pos_min; --p) {
                 for (int s : estaciones) {
@@ -207,13 +194,8 @@ bool ALNS_EVRPTW::aplicar_insercion(int r_idx, int pos, int nodo_id) {
                             mejor_dist = solucion_actual[r_idx].distancia_total;
                             mejor_estacion = s; mejor_pos = p;
                         }
-                        if (extra_restantes < 0) extra_restantes = EXTRA_POS;
                     }
                     solucion_actual[r_idx].secuencia.erase(solucion_actual[r_idx].secuencia.begin() + p);
-                }
-                if (extra_restantes >= 0) {
-                    if (extra_restantes == 0) break;
-                    extra_restantes--;
                 }
             }
             if (mejor_estacion != -1) {

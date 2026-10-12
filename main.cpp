@@ -21,6 +21,8 @@
 #include <fstream>
 #include <chrono>
 #include <filesystem>
+#include <algorithm>
+#include <limits>
 
 #include "Nodo.h"
 #include "ConfigALNS.h"
@@ -32,7 +34,7 @@ namespace fs = std::filesystem;
 
 int main() {
     // Carpetas de entrada (instancias) y salida (resultados en CSV).
-    string carpeta_instancias = "./instancias2/";
+    string carpeta_instancias = "./instancias/";
     string carpeta_salida = "./resultados/";
 
     // Crea la carpeta de salida si aun no existe.
@@ -67,11 +69,43 @@ int main() {
         return 1;
     }
 
-    // Recorre cada archivo .txt de la carpeta de instancias.
+    // Listar todos los archivos .txt disponibles y ordenarlos alfabeticamente.
+    vector<fs::path> archivos_disponibles;
     for (const auto& entry : fs::directory_iterator(carpeta_instancias)) {
-        if (entry.path().extension() != ".txt") continue;
-        string ruta_archivo = entry.path().string();
-        string nombre_instancia = entry.path().stem().string();
+        if (entry.path().extension() == ".txt") {
+            archivos_disponibles.push_back(entry.path());
+        }
+    }
+    sort(archivos_disponibles.begin(), archivos_disponibles.end());
+
+    if (archivos_disponibles.empty()) {
+        cerr << "[!] No hay archivos .txt en: " << carpeta_instancias << endl;
+        return 1;
+    }
+
+    // Mostrar menu de seleccion.
+    cout << "\n=== Instancias disponibles ===" << endl;
+    for (size_t i = 0; i < archivos_disponibles.size(); ++i) {
+        cout << "  " << (i + 1) << ". " << archivos_disponibles[i].stem().string() << endl;
+    }
+
+    int seleccion = 0;
+    while (true) {
+        cout << "\nSeleccione el numero de la instancia a ejecutar (1-"
+             << archivos_disponibles.size() << "): ";
+        if (cin >> seleccion && seleccion >= 1 && seleccion <= (int)archivos_disponibles.size()) {
+            break;
+        }
+        cout << "[!] Seleccion invalida. Intente de nuevo." << endl;
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    }
+
+    // Procesar solo la instancia seleccionada.
+    {
+        const auto& ruta_path = archivos_disponibles[seleccion - 1];
+        string ruta_archivo = ruta_path.string();
+        string nombre_instancia = ruta_path.stem().string();
 
         // Parsea la instancia: nodos (deposito/clientes/estaciones) y
         // parametros del vehiculo electrico (capacidad de carga, bateria,
@@ -80,7 +114,7 @@ int main() {
         double cc, cb, rc, rcons;
         if (!leerInstancia(ruta_archivo, mapa, cc, cb, rc, rcons)) {
             cout << "[!] Error al leer: " << ruta_archivo << endl;
-            continue;
+            return 1;
         }
 
         // Crear subcarpeta propia para esta instancia: ./resultados/r107_21/
