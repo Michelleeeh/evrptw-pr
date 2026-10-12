@@ -18,7 +18,7 @@ recargas parciales en las estaciones (EVRPTW-PR).
 > caché de costos, formato de instancias) son propias de este proyecto. Si
 > algo del comportamiento no coincide exactamente con lo que describe el
 > paper, es intencional o producto de una simplificación práctica, no un bug
-> por default — pero siempre vale la pena revisar el paper si algo no cuadra.
+> por default. Por lo tanto, es recomendable revisar el paper.
 
 ---
 
@@ -141,11 +141,11 @@ estación de recarga antes del punto de falla (ver `probar_insercion` y
 
 ### 2.6. Operadores de inserción de estaciones
 
-`ALNS_EVRPTW_InsercionEstaciones.cpp`: tres variantes (`greedy`,
-`greedy_..._comparison`, `best_station_insertion`) que localizan el primer
-punto de la ruta donde la batería se vuelve negativa y prueban insertar la
-estación que menos distancia añade, comparando distintas posiciones hacia
-atrás en la ruta.
+`ALNS_EVRPTW_InsercionEstaciones.cpp`:
+
+- **`greedy_station_insertion`**: busca solo la posición justo antes del fallo de batería y prueba ahí todas las estaciones, quedándose con la de menor costo.
+- **`greedy_station_insertion_comparison`**: prueba todas las posiciones desde el fallo hasta el inicio de la ruta con todas las estaciones — la búsqueda más exhaustiva de las tres.
+- **`best_station_insertion`**: retrocede solo hasta el último punto de recarga previo (no hasta el inicio de la ruta), un balance entre exhaustividad y velocidad.
 
 ### 2.7. Criterio de aceptación (Simulated Annealing)
 
@@ -199,12 +199,6 @@ proyecto para exprimir más valor del historial de búsqueda.
 | `ALNS_EVRPTW_SetCovering.cpp` | Matheurística final (greedy o CP-SAT/OR-Tools, ver sección 5). |
 | `ALNS_EVRPTW_Auxiliares.cpp` | Funciones privadas de apoyo (construcción inicial, aceptación, pesos, etc.). |
 | `main.cpp` | Punto de entrada: recorre instancias, corre el ALNS, guarda resultados. |
-
-**Si vas a trabajar en el ALNS**, los archivos que más te interesan son los de
-`Remocion*`, `Insercion*` y `ALNS_EVRPTW_Algoritmo.cpp` (el ciclo principal
-está ahí, con la lógica de qué operador se usa en cada iteración). El archivo
-`ALNS_EVRPTW.h` es donde hay que declarar cualquier operador nuevo antes de
-implementarlo.
 
 ---
 
@@ -269,11 +263,12 @@ greedy.
 
 ### 5.3. Directorio de trabajo
 
-El programa busca las instancias en `./instancias2/` (ruta relativa), que en
+El programa busca las instancias en `./instancias2/`, que en
 Visual Studio por defecto se resuelve contra la carpeta del `.vcxproj` (no
-contra `Debug/` o `x64/Debug/`). Puedes confirmarlo o cambiarlo en
-*Propiedades del proyecto → Depuración → Directorio de trabajo*. Los
-resultados se guardan automáticamente en `./resultados/` y como CSVs sueltos
+contra `Debug/` o `x64/Debug/`). Todas las instancias se encuentran dentro de la carpeta 
+`./instancias/`, para analizar una instancia en específico se debe copiar en `./instancias2/`.
+Puedes confirmarlo o cambiarlo en *Propiedades del proyecto → Depuración → Directorio de trabajo*.
+Los resultados se guardan automáticamente en `./resultados/` y como CSVs sueltos
 (`rutas_*.csv`, `trayectoria_*.csv`, `comparacion_*.csv`) en ese mismo
 directorio.
 
@@ -319,7 +314,7 @@ suficiente para la convergencia).
 
 Keskin, M., & Çatay, B. (2016). *Partial Recharge Strategies for the Electric
 Vehicle Routing Problem with Time Windows.* Transportation Research Part C:
-Emerging Technologies.
+Emerging Technologies. [Link](https://www.researchgate.net/publication/297584057_Partial_Recharge_Strategies_for_the_Electric_Routing_Problem_with_Time_Windows)
 
 El problema base (EVRPTW sin recarga parcial) fue introducido originalmente
 por:
