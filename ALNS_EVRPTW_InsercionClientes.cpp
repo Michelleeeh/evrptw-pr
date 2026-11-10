@@ -21,20 +21,8 @@ void ALNS_EVRPTW::greedy_insertion(vector<int>& fuera, bool con_ruido) {
             int u = fuera[i];
             vector<int> rutas_cand = rutas_candidatas_para(u);
             for (int r : rutas_cand) {
-                if (cache_costos[u][r] == -2.0) continue;
-                const auto& ruta = solucion_actual[r];
-                double costo_ruta = numeric_limits<double>::max();
                 int mejor_pos_local = -1;
-                if (ruta.carga_total + mapa[u].demanda <= CAP_CARGA) {
-                    for (int p = 1; p < (int)ruta.secuencia.size(); ++p) {
-                        double inc = probar_insercion(r, p, u);
-                        if (con_ruido && inc != numeric_limits<double>::max()) {
-                            inc *= (0.8 + 0.4 * dist_01(rng));
-                        }
-                        if (inc < costo_ruta) { costo_ruta = inc; mejor_pos_local = p; }
-                    }
-                }
-                cache_costos[u][r] = (costo_ruta == numeric_limits<double>::max()) ? -2.0 : costo_ruta;
+                double costo_ruta = mejor_insercion_en_ruta(u, r, mejor_pos_local, con_ruido);
                 if (costo_ruta < mejor_costo) {
                     mejor_costo = costo_ruta; mejor_c_idx = i; mejor_r = r; mejor_p = mejor_pos_local;
                 }
@@ -43,12 +31,13 @@ void ALNS_EVRPTW::greedy_insertion(vector<int>& fuera, bool con_ruido) {
         if (mejor_c_idx != -1) {
             if (aplicar_insercion(mejor_r, mejor_p, fuera[mejor_c_idx])) {
                 ruta_de_nodo[fuera[mejor_c_idx]] = mejor_r;
-                for (int u : fuera) cache_costos[u][mejor_r] = -1.0;
+                invalidar_cache_ruta(fuera, mejor_r);
                 fuera.erase(fuera.begin() + mejor_c_idx);
             }
             else cache_costos[fuera[mejor_c_idx]][mejor_r] = -2.0;
         }
         else {
+            if (config.ampliar_busqueda_antes_de_nueva_ruta && insertar_en_cualquier_ruta(fuera)) continue;
             crear_nueva_ruta(fuera[0]);
             reset_cache(fuera, solucion_actual.size());
             ruta_de_nodo.resize(mapa.size(), -1);
@@ -59,39 +48,37 @@ void ALNS_EVRPTW::greedy_insertion(vector<int>& fuera, bool con_ruido) {
     limpiar_rutas_vacias();
 }
 
-void ALNS_EVRPTW::regret_insertion(vector<int>& fuera) {
+void ALNS_EVRPTW::regret_insertion(vector<int>& fuera, int k) {
     reset_cache(fuera, solucion_actual.size());
     reconstruir_indice_rutas();
+    const double INF = numeric_limits<double>::max();
+    vector<double> mejores; // k menores costos (INF si no hay)
 
     while (!fuera.empty()) {
         double max_regret = -1.0;
         int best_c_idx = -1, best_r = -1, best_p = -1;
         for (int i = 0; i < (int)fuera.size(); ++i) {
             int u = fuera[i];
-            double min_costo = numeric_limits<double>::max();
-            double min_costo_2 = numeric_limits<double>::max();
+            mejores.assign(k, INF);
             int local_best_r = -1, local_best_p = -1;
 
             vector<int> rutas_cand = rutas_candidatas_para(u);
             for (int r : rutas_cand) {
-                if (cache_costos[u][r] == -2.0) continue;
-                const auto& ruta = solucion_actual[r];
-                double costo_ruta = numeric_limits<double>::max();
                 int mejor_pos_local = -1;
-                if (ruta.carga_total + mapa[u].demanda <= CAP_CARGA) {
-                    for (int p = 1; p < (int)ruta.secuencia.size(); ++p) {
-                        double inc = probar_insercion(r, p, u);
-                        if (inc < costo_ruta) { costo_ruta = inc; mejor_pos_local = p; }
-                    }
+                double costo_ruta = mejor_insercion_en_ruta(u, r, mejor_pos_local);
+                if (costo_ruta < mejores[0]) { local_best_r = r; local_best_p = mejor_pos_local; }
+                // insertar ordenado en los k mejores
+                for (int j = 0; j < k; ++j) {
+                    if (costo_ruta < mejores[j]) { for (int m = k - 1; m > j; --m) mejores[m] = mejores[m - 1]; mejores[j] = costo_ruta; break; }
                 }
-                cache_costos[u][r] = (costo_ruta == numeric_limits<double>::max()) ? -2.0 : costo_ruta;
-                if (costo_ruta < min_costo) {
-                    min_costo_2 = min_costo; min_costo = costo_ruta;
-                    local_best_r = r; local_best_p = mejor_pos_local;
-                }
-                else if (costo_ruta < min_costo_2) min_costo_2 = costo_ruta;
             }
-            double regret = (min_costo == numeric_limits<double>::max()) ? 999999.0 : (min_costo_2 - min_costo);
+            double min_costo = mejores[0];
+            double regret;
+            if (min_costo == INF) regret = 999999.0;
+            else {
+                regret = 0.0;
+                for (int j = 1; j < k; ++j) regret += (mejores[j] == INF ? 999999.0 : mejores[j] - min_costo);
+            }
             if (regret > max_regret) {
                 max_regret = regret; best_c_idx = i;
                 best_r = local_best_r; best_p = local_best_p;
@@ -100,12 +87,13 @@ void ALNS_EVRPTW::regret_insertion(vector<int>& fuera) {
         if (best_r != -1) {
             if (aplicar_insercion(best_r, best_p, fuera[best_c_idx])) {
                 ruta_de_nodo[fuera[best_c_idx]] = best_r;
-                for (int u : fuera) cache_costos[u][best_r] = -1.0;
+                invalidar_cache_ruta(fuera, best_r);
                 fuera.erase(fuera.begin() + best_c_idx);
             }
             else cache_costos[fuera[best_c_idx]][best_r] = -2.0;
         }
         else {
+            if (config.ampliar_busqueda_antes_de_nueva_ruta && insertar_en_cualquier_ruta(fuera)) continue;
             crear_nueva_ruta(fuera[0]);
             reset_cache(fuera, solucion_actual.size());
             ruta_de_nodo.resize(mapa.size(), -1);
@@ -117,6 +105,7 @@ void ALNS_EVRPTW::regret_insertion(vector<int>& fuera) {
 }
 
 void ALNS_EVRPTW::time_based_insertion(vector<int>& fuera) {
+    struct Guard { bool& f; Guard(bool& f_, bool v) : f(f_) { f = v; } ~Guard() { f = false; } } guard(modo_costo_tiempo, config.insercion_por_tiempo);
     reset_cache(fuera, solucion_actual.size());
     reconstruir_indice_rutas();
     while (!fuera.empty()) {
@@ -126,17 +115,8 @@ void ALNS_EVRPTW::time_based_insertion(vector<int>& fuera) {
             int u = fuera[i];
             vector<int> rutas_cand = rutas_candidatas_para(u);
             for (int r : rutas_cand) {
-                if (cache_costos[u][r] == -2.0) continue;
-                const auto& ruta = solucion_actual[r];
-                double costo_ruta = numeric_limits<double>::max();
                 int mejor_pos_local = -1;
-                if (ruta.carga_total + mapa[u].demanda <= CAP_CARGA) {
-                    for (int p = 1; p < (int)ruta.secuencia.size(); ++p) {
-                        double inc = probar_insercion(r, p, u);
-                        if (inc < costo_ruta) { costo_ruta = inc; mejor_pos_local = p; }
-                    }
-                }
-                cache_costos[u][r] = (costo_ruta == numeric_limits<double>::max()) ? -2.0 : costo_ruta;
+                double costo_ruta = mejor_insercion_en_ruta(u, r, mejor_pos_local);
                 if (costo_ruta < mejor_costo_global) {
                     mejor_costo_global = costo_ruta; mejor_c_idx = i; mejor_r = r; mejor_p = mejor_pos_local;
                 }
@@ -145,12 +125,13 @@ void ALNS_EVRPTW::time_based_insertion(vector<int>& fuera) {
         if (mejor_c_idx != -1) {
             if (aplicar_insercion(mejor_r, mejor_p, fuera[mejor_c_idx])) {
                 ruta_de_nodo[fuera[mejor_c_idx]] = mejor_r;
-                for (int u : fuera) cache_costos[u][mejor_r] = -1.0;
+                invalidar_cache_ruta(fuera, mejor_r);
                 fuera.erase(fuera.begin() + mejor_c_idx);
             }
             else cache_costos[fuera[mejor_c_idx]][mejor_r] = -2.0;
         }
         else {
+            if (config.ampliar_busqueda_antes_de_nueva_ruta && insertar_en_cualquier_ruta(fuera)) continue;
             crear_nueva_ruta(fuera[0]);
             reset_cache(fuera, solucion_actual.size());
             ruta_de_nodo.resize(mapa.size(), -1);
@@ -162,6 +143,7 @@ void ALNS_EVRPTW::time_based_insertion(vector<int>& fuera) {
 }
 
 void ALNS_EVRPTW::zone_insertion(vector<int>& fuera) {
+    struct Guard { bool& f; Guard(bool& f_, bool v) : f(f_) { f = v; } ~Guard() { f = false; } } guard(modo_costo_tiempo, config.insercion_por_tiempo);
     if (solucion_actual.empty()) {
         while (!fuera.empty()) { crear_nueva_ruta(fuera[0]); fuera.erase(fuera.begin()); }
         return;
@@ -192,7 +174,21 @@ void ALNS_EVRPTW::zone_insertion(vector<int>& fuera) {
     sort(dist_rutas.begin(), dist_rutas.end());
     int num_rutas_zona = max(1, (int)solucion_actual.size() / 2);
     vector<int> rutas_zona;
-    for (int i = 0; i < num_rutas_zona; ++i) rutas_zona.push_back(dist_rutas[i].second);
+    if (config.zonas_por_cuadricula) {
+        // Paper: solo las rutas que pasan por una zona al azar de la cuadricula.
+        int z = zona_aleatoria_no_vacia();
+        for (int r = 0; r < (int)solucion_actual.size() && z != -1; ++r)
+            for (const auto& p : solucion_actual[r].secuencia)
+                if (!mapa[p.nodo_id].es_estacion && !mapa[p.nodo_id].es_deposito && zona_de(p.nodo_id) == z) { rutas_zona.push_back(r); break; }
+    }
+    if (rutas_zona.empty())
+        for (int i = 0; i < num_rutas_zona; ++i) rutas_zona.push_back(dist_rutas[i].second);
+
+    // Cambio 1: zone_insertion tambien usa la cache (cliente, ruta). Ademas,
+    // marcar -2 cuando aplicar_insercion falla corrige un cuelgue latente del
+    // original, que volvia a elegir el mismo par (cliente, ruta, pos) fallido
+    // en cada vuelta sin salir nunca del while.
+    reset_cache(fuera, solucion_actual.size());
 
     while (!fuera.empty()) {
         double mejor_costo_global = numeric_limits<double>::max();
@@ -200,22 +196,24 @@ void ALNS_EVRPTW::zone_insertion(vector<int>& fuera) {
         for (int i = 0; i < (int)fuera.size(); ++i) {
             int u = fuera[i];
             for (int r : rutas_zona) {
-                const auto& ruta = solucion_actual[r];
-                if (ruta.carga_total + mapa[u].demanda <= CAP_CARGA) {
-                    for (int p = 1; p < (int)ruta.secuencia.size(); ++p) {
-                        double inc = probar_insercion(r, p, u);
-                        if (inc < mejor_costo_global) {
-                            mejor_costo_global = inc; mejor_c_idx = i; mejor_r = r; mejor_p = p;
-                        }
-                    }
+                int mejor_pos_local = -1;
+                double costo_ruta = mejor_insercion_en_ruta(u, r, mejor_pos_local);
+                if (costo_ruta < mejor_costo_global) {
+                    mejor_costo_global = costo_ruta; mejor_c_idx = i; mejor_r = r; mejor_p = mejor_pos_local;
                 }
             }
         }
         if (mejor_c_idx != -1) {
-            if (aplicar_insercion(mejor_r, mejor_p, fuera[mejor_c_idx])) fuera.erase(fuera.begin() + mejor_c_idx);
+            if (aplicar_insercion(mejor_r, mejor_p, fuera[mejor_c_idx])) {
+                invalidar_cache_ruta(fuera, mejor_r);
+                fuera.erase(fuera.begin() + mejor_c_idx);
+            }
+            else cache_costos[fuera[mejor_c_idx]][mejor_r] = -2.0;
         }
         else {
+            if (config.ampliar_busqueda_antes_de_nueva_ruta && insertar_en_cualquier_ruta(fuera)) continue;
             crear_nueva_ruta(fuera[0]); fuera.erase(fuera.begin());
+            reset_cache(fuera, solucion_actual.size());
         }
     }
     limpiar_rutas_vacias();

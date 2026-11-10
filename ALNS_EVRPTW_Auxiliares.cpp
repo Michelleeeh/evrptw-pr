@@ -12,8 +12,15 @@
 #include <iostream>
 #include <unordered_set>
 #include <unordered_map>
+#include <cstdlib>
 
 using namespace std;
+
+#ifdef VERIFICAR_PREFILTRO
+// Contador de candidatos descartados y comprobados (modo de verificacion).
+static long verificaciones_prefiltro = 0;
+struct ReportePrefiltro { ~ReportePrefiltro() { cerr << "[VERIFICAR_PREFILTRO] candidatos descartados verificados: " << verificaciones_prefiltro << " (ninguno era factible)" << endl; } } reporte_prefiltro_;
+#endif
 
 void ALNS_EVRPTW::inicializar_solucion() {
     vector<int> no_asignados;
@@ -23,7 +30,38 @@ void ALNS_EVRPTW::inicializar_solucion() {
     }
     solucion_actual.clear();
     solucion_actual.reserve(50);
-    greedy_insertion(no_asignados, false);
+    if (!config.solucion_inicial_secuencial) { greedy_insertion(no_asignados, false); return; }
+
+    // Algoritmo 1 del paper (construccion secuencial).
+    vector<int>& pend = no_asignados;
+    while (!pend.empty()) {
+        // 1/5: nueva ruta con el cliente no servido mas cercano al deposito
+        int bi = 0;
+        for (int i = 1; i < (int)pend.size(); ++i)
+            if (matriz_dist[ID_DEPOSITO][pend[i]] < matriz_dist[ID_DEPOSITO][pend[bi]]) bi = i;
+        crear_nueva_ruta(pend[bi]);
+        pend.erase(pend.begin() + bi);
+        int r = (int)solucion_actual.size() - 1;
+        vector<char> fallido(mapa.size(), 0);
+        // 3/7: insertar el cliente que menos aumenta la distancia hasta que no quepa ninguno
+        while (true) {
+            double mejor = numeric_limits<double>::max(); int mejor_i = -1, mejor_p = -1;
+            const Ruta& ruta = solucion_actual[r];
+            for (int i = 0; i < (int)pend.size(); ++i) {
+                int u = pend[i];
+                if (fallido[u] || ruta.carga_total + mapa[u].demanda > CAP_CARGA) continue;
+                for (int p = 1; p < (int)ruta.secuencia.size(); ++p) {
+                    double inc = probar_insercion(r, p, u);
+                    if (inc < mejor) { mejor = inc; mejor_i = i; mejor_p = p; }
+                }
+            }
+            if (mejor_i == -1) break;
+            int u = pend[mejor_i];
+            if (aplicar_insercion(r, mejor_p, u)) pend.erase(pend.begin() + mejor_i);
+            else fallido[u] = 1;
+        }
+    }
+    reconstruir_indice_rutas();
 }
 
 void ALNS_EVRPTW::crear_nueva_ruta(int nodo_id) {
@@ -48,41 +86,235 @@ void ALNS_EVRPTW::crear_nueva_ruta(int nodo_id) {
     solucion_actual.push_back(nueva);
 }
 
-double ALNS_EVRPTW::probar_insercion(int r_idx, int pos, int u) {
-    buffer_insercion.secuencia = solucion_actual[r_idx].secuencia;
-    double dist_original = solucion_actual[r_idx].distancia_total;
-
-    buffer_insercion.secuencia.insert(buffer_insercion.secuencia.begin() + pos, { u, 0, 0, 0, 0 });
-    int status = buffer_insercion.calcular_metricas(mapa, matriz_dist, CAP_BATT, CAP_CARGA, R_CARGA, R_CONSUMO, ID_DEPOSITO);
-
-    if (status == 0) return buffer_insercion.distancia_total - dist_original;
-
-    // Fallo de bateria: probar todas las estaciones en las MAX_POS posiciones
-    // mas cercanas al fallo, y quedarse con la mejor combinacion global.
-    if (status == 1) {
-        int idx_falla = -1;
-        for (int i = 1; i < (int)buffer_insercion.secuencia.size(); ++i) {
-            if (buffer_insercion.secuencia[i].llegada_bateria < -1e-9) { idx_falla = i; break; }
-        }
-        if (idx_falla != -1 && idx_falla >= 2) {
-            static const int MAX_POS = 10;
-            double mejor_costo = numeric_limits<double>::max();
-            int pos_min = max(1, idx_falla - MAX_POS);
-
-            for (int p = idx_falla - 1; p >= pos_min; --p) {
-                for (int s : estaciones) {
-                    buffer_insercion.secuencia.insert(buffer_insercion.secuencia.begin() + p, { s, 0, 0, 0, 0 });
-                    if (buffer_insercion.calcular_metricas(mapa, matriz_dist, CAP_BATT, CAP_CARGA, R_CARGA, R_CONSUMO, ID_DEPOSITO) == 0) {
-                        double costo = buffer_insercion.distancia_total - dist_original;
-                        if (costo < mejor_costo) mejor_costo = costo;
-                    }
-                    buffer_insercion.secuencia.erase(buffer_insercion.secuencia.begin() + p);
-                }
+bool ALNS_EVRPTW::insertar_en_cualquier_ruta(vector<int>& fuera) {
+    while (true) {
+        double mejor_costo = numeric_limits<double>::max();
+        int mejor_i = -1, mejor_r = -1, mejor_p = -1;
+        for (int i = 0; i < (int)fuera.size(); ++i) {
+            int u = fuera[i];
+            for (int r = 0; r < (int)solucion_actual.size(); ++r) {
+                int p = -1;
+                double c = mejor_insercion_en_ruta(u, r, p);
+                if (c < mejor_costo) { mejor_costo = c; mejor_i = i; mejor_r = r; mejor_p = p; }
             }
-            return mejor_costo;
+        }
+        if (mejor_i == -1) return false;
+        if (aplicar_insercion(mejor_r, mejor_p, fuera[mejor_i])) {
+            ruta_de_nodo[fuera[mejor_i]] = mejor_r;
+            invalidar_cache_ruta(fuera, mejor_r);
+            fuera.erase(fuera.begin() + mejor_i);
+            return true;
+        }
+        cache_costos[fuera[mejor_i]][mejor_r] = -2.0; // fallo al aplicar: seguir buscando
+    }
+}
+
+double ALNS_EVRPTW::probar_insercion(int r_idx, int pos, int u) {
+    const Ruta& ruta = solucion_actual[r_idx];
+    const double dist_original = ruta.distancia_total;
+    // Time Based Insertion (paper): el costo es el incremento del tiempo
+    // total de la ruta (llegada al deposito) en vez de la distancia.
+    const bool por_tiempo = modo_costo_tiempo;
+    const double tiempo_original = ruta.secuencia.empty() ? 0.0 : ruta.secuencia.back().salida_tiempo;
+    auto costo_de = [&](double dist_nueva, double tiempo_nuevo) {
+        return por_tiempo ? (tiempo_nuevo - tiempo_original) : (dist_nueva - dist_original);
+    };
+
+    // Cambio 4: evaluar sin copiar la ruta ni insertar en el vector. Ademas
+    // se recogen, parada a parada, las cotas que usa el prefiltro de abajo.
+    static thread_local EstadoVirtual estado;
+    double dist = 0.0, tfin = 0.0;
+    int idx_falla = -1;
+    int status = ruta.calcular_metricas_con_insercion_virtual(mapa, matriz_dist, CAP_BATT, CAP_CARGA,
+        R_CARGA, R_CONSUMO, ID_DEPOSITO, pos, u, -1, -1, dist, idx_falla,
+        config.usar_prefiltro_exacto ? &estado : nullptr, &tfin);
+
+    if (status == 0) return costo_de(dist, tfin);
+    if (status != 1 || idx_falla < 2) return numeric_limits<double>::max();
+
+    // Fallo de bateria: buscar una estacion de reparacion en las MAX_POS
+    // posiciones anteriores al punto de fallo (misma politica que el original).
+    static const int N_EST = 21;   // numero de estaciones mas cercanas a probar (busqueda exhaustiva)
+    const int n_virt = (int)ruta.secuencia.size() + 1;
+    const int id_falla_nodo = (idx_falla == pos) ? u
+        : ruta.secuencia[idx_falla > pos ? idx_falla - 1 : idx_falla].nodo_id;
+
+    // Nodo en la posicion k de la secuencia virtual "ruta con u insertado en pos".
+    auto nodo_en = [&](int k) -> int {
+        if (k == pos) return u;
+        return ruta.secuencia[k > pos ? k - 1 : k].nodo_id;
+    };
+
+    // Primera posicion donde se prueba la estacion: MAX_POS hacia atras, o
+    // (paper) justo despues del ultimo punto de carga anterior al fallo.
+    int pos_min;
+    if (config.max_posiciones_estacion > 0) pos_min = max(1, idx_falla - config.max_posiciones_estacion);
+    else {
+        pos_min = 1;
+        for (int k = idx_falla - 1; k >= 1; --k) {
+            int id = nodo_en(k);
+            if (mapa[id].es_estacion || mapa[id].es_deposito) { pos_min = k + 1; break; }
         }
     }
-    return numeric_limits<double>::max();
+
+    // ------------------------------------------------------------------
+    //  Prefiltro EXACTO (sustituye a la poda heuristica top-k del informe).
+    //  Medido en rc104_21: el 99 % de las evaluaciones (posicion, estacion)
+    //  fallan, y casi todas por una de estas tres causas, que se detectan
+    //  con cotas en O(1) sin recorrer la ruta:
+    //    (a) la estacion s no se alcanza ni con bateria llena desde el
+    //        ultimo punto de carga anterior a p;
+    //    (b) desde s, ni con bateria llena se llega al siguiente punto de
+    //        carga (o al deposito) pasando por el nodo siguiente;
+    //    (c) aun sin cargar nada en la ruta, el desvio por s hace llegar
+    //        tarde a s o al nodo siguiente.
+    //  Cada cota es valida para cualquier politica de carga, y se aplica
+    //  con un margen (MARGEN) muy superior al error de redondeo, de modo
+    //  que NUNCA descarta un candidato que calcular_metricas aceptaria:
+    //  el resultado es identico al de la busqueda exhaustiva.
+    // ------------------------------------------------------------------
+    static thread_local vector<double> energia_hasta_prox; // desde A[i] hasta el proximo punto de carga
+    const bool prefiltro = config.usar_prefiltro_exacto;
+    if (prefiltro) {
+        if ((int)energia_hasta_prox.size() < n_virt) energia_hasta_prox.resize(n_virt);
+        double acum = 0.0;
+        int ultimo = nodo_en(n_virt - 1);
+        if (!mapa[ultimo].es_deposito) acum = matriz_dist[ultimo][ID_DEPOSITO] * R_CONSUMO;
+        energia_hasta_prox[n_virt - 1] = acum;
+        int id_sig = ultimo;
+        for (int i = n_virt - 2; i >= pos_min; --i) {
+            int id_i = nodo_en(i);
+            double tramo = matriz_dist[id_i][id_sig] * R_CONSUMO;
+            acum = (mapa[id_sig].es_estacion || mapa[id_sig].es_deposito) ? tramo : tramo + acum;
+            energia_hasta_prox[i] = acum;
+            id_sig = id_i;
+        }
+    }
+    static const double MARGEN = 1e-6;
+
+    double mejor_costo = numeric_limits<double>::max();
+    auto buscar_estacion = [&](bool solo_topk) {
+        for (int p = idx_falla - 1; p >= pos_min; --p) {
+            const int id_prev = nodo_en(p - 1);
+            const int id_next = nodo_en(p);
+            const vector<int>* cands;
+            int n_cands;
+            if (solo_topk) {
+                // Cambio 3 (opcional): solo las k estaciones con menor desvio
+                // para el arco (id_prev, id_next) donde se insertaria la estacion.
+                cands = &estaciones_candidatas_arco[id_prev][id_next];
+                n_cands = (int)cands->size();
+            }
+            else {
+                cands = &estaciones_cercanas[id_falla_nodo];
+                n_cands = min(N_EST, (int)cands->size());
+            }
+            for (int k = 0; k < n_cands; ++k) {
+                int s = (*cands)[k];
+                if (prefiltro) {
+                    const Nodo& ns = mapa[s];
+                    const Nodo& nn = mapa[id_next];
+                    double d_prev_s = matriz_dist[id_prev][s];
+                    double d_s_next = matriz_dist[s][id_next];
+                    bool descartar = false;
+                    // (a) bateria para llegar a s
+                    if (estado.energia_desde_ultimo_punto_carga[p - 1] + d_prev_s * R_CONSUMO > CAP_BATT + MARGEN) descartar = true;
+                    // (b) bateria desde s hasta el proximo punto de carga
+                    else if (d_s_next * R_CONSUMO + energia_hasta_prox[p] > CAP_BATT + MARGEN) descartar = true;
+                    else {
+                        // (c) ventanas de tiempo con tiempo minimo (sin cargar)
+                        double t_s = estado.tiempo_salida_minimo[p - 1] + d_prev_s;
+                        if (t_s > ns.due_date + 1e-9 + MARGEN) descartar = true;
+                        else if (max(t_s, ns.ready_time) + d_s_next > nn.due_date + 1e-9 + MARGEN) descartar = true;
+                    }
+                    if (descartar) {
+#ifdef VERIFICAR_PREFILTRO
+                        // Modo de verificacion: evaluar de todos modos y abortar si el
+                        // candidato descartado era factible (nunca deberia ocurrir).
+                        double dv = 0.0; int fv = -1;
+                        if (ruta.calcular_metricas_con_insercion_virtual(mapa, matriz_dist, CAP_BATT, CAP_CARGA,
+                            R_CARGA, R_CONSUMO, ID_DEPOSITO, pos, u, p, s, dv, fv) == 0) {
+                            cerr << "[VERIFICAR_PREFILTRO] candidato factible descartado: ruta " << r_idx
+                                 << " u=" << u << " pos=" << pos << " p=" << p << " s=" << s << endl;
+                            abort();
+                        }
+                        verificaciones_prefiltro++;
+#endif
+                        continue;
+                    }
+                }
+                double dist_s = 0.0, tfin_s = 0.0;
+                int dummy = -1;
+                if (ruta.calcular_metricas_con_insercion_virtual(mapa, matriz_dist, CAP_BATT, CAP_CARGA,
+                    R_CARGA, R_CONSUMO, ID_DEPOSITO, pos, u, p, s, dist_s, dummy, nullptr, &tfin_s) == 0) {
+                    double costo = costo_de(dist_s, tfin_s);
+                    if (costo < mejor_costo) mejor_costo = costo;
+                }
+            }
+        }
+    };
+
+    if (config.usar_topk_en_probar_insercion) {
+        buscar_estacion(true);
+        // Red de seguridad: si la poda no encontro reparacion, confirmar con
+        // la busqueda exhaustiva antes de declarar la insercion infactible.
+        if (mejor_costo == numeric_limits<double>::max() && config.topk_fallback_exhaustivo) {
+            buscar_estacion(false);
+        }
+    }
+    else {
+        buscar_estacion(false);
+    }
+    return mejor_costo;
+}
+
+double ALNS_EVRPTW::mejor_insercion_en_ruta(int u, int r, int& mejor_pos, bool con_ruido) {
+    mejor_pos = -1;
+
+    // Cambio 1: reutilizar la cache si la entrada (cliente, ruta) es valida.
+    double cacheado = cache_costos[u][r];
+    if (cacheado == -2.0) return numeric_limits<double>::max();
+
+    if (cacheado == -1.0) {
+        // Evaluar de verdad y guardar costo, posicion e incrementos por posicion.
+        const auto& ruta = solucion_actual[r];
+        auto& incs = cache_incs[u][r];
+        incs.clear();
+        double costo_ruta = numeric_limits<double>::max();
+        if (ruta.carga_total + mapa[u].demanda <= CAP_CARGA) {
+            int n_pos = (int)ruta.secuencia.size() - 1;
+            incs.resize(max(0, n_pos), numeric_limits<double>::max());
+            for (int p = 1; p < (int)ruta.secuencia.size(); ++p) {
+                double inc = probar_insercion(r, p, u);
+                incs[p - 1] = inc;
+                if (inc < costo_ruta) { costo_ruta = inc; mejor_pos = p; }
+            }
+        }
+        if (costo_ruta == numeric_limits<double>::max()) {
+            cache_costos[u][r] = -2.0; cache_pos[u][r] = -1;
+            return costo_ruta;
+        }
+        cache_costos[u][r] = costo_ruta; cache_pos[u][r] = mejor_pos;
+        cacheado = costo_ruta;
+    }
+
+    if (!con_ruido) {
+        mejor_pos = cache_pos[u][r];
+        return cacheado;
+    }
+
+    // Greedy con ruido: ruido fresco por posicion sobre los incrementos
+    // cacheados, en el mismo orden y con las mismas extracciones del RNG que
+    // el codigo original (asi la trayectoria es identica, solo mas rapida).
+    const auto& incs = cache_incs[u][r];
+    double costo_ruta = numeric_limits<double>::max();
+    mejor_pos = -1;
+    for (int p = 1; p <= (int)incs.size(); ++p) {
+        double inc = incs[p - 1];
+        if (inc != numeric_limits<double>::max()) inc *= (0.8 + 0.4 * dist_01(rng));
+        if (inc < costo_ruta) { costo_ruta = inc; mejor_pos = p; }
+    }
+    return costo_ruta;
 }
 
 void ALNS_EVRPTW::reconstruir_indice_rutas() {
@@ -149,6 +381,11 @@ void ALNS_EVRPTW::registrar_rutas_en_pool(const vector<Ruta>& sol) {
 }
 
 vector<int> ALNS_EVRPTW::rutas_candidatas_para(int u) {
+    if (config.evaluar_todas_las_rutas) {
+        vector<int> todas(solucion_actual.size());
+        for (int r = 0; r < (int)todas.size(); ++r) todas[r] = r;
+        return todas;
+    }
     static vector<bool> marca; // Reutilizable entre llamadas.
     if ((int)marca.size() < (int)solucion_actual.size()) marca.resize(solucion_actual.size(), false);
 
@@ -178,16 +415,26 @@ bool ALNS_EVRPTW::aplicar_insercion(int r_idx, int pos, int nodo_id) {
     if (status == 1) {
         int idx_falla = -1;
         for (int i = 1; i < (int)solucion_actual[r_idx].secuencia.size(); i++) {
-            if (solucion_actual[r_idx].secuencia[i].llegada_bateria < 0) { idx_falla = i; break; }
+            if (solucion_actual[r_idx].secuencia[i].llegada_bateria < -EPS_BATERIA) { idx_falla = i; break; }
         }
         if (idx_falla != -1 && idx_falla >= 2) {
-            static const int MAX_POS = 10;
+            const int MAX_POS = config.max_posiciones_estacion;
+            static const int N_EST = 21;
+            int id_falla = solucion_actual[r_idx].secuencia[idx_falla].nodo_id;
+            const auto& ests_ord = estaciones_cercanas[id_falla];
+            int n_est = min(N_EST, (int)ests_ord.size());
             double mejor_dist = numeric_limits<double>::max();
             int mejor_estacion = -1, mejor_pos = -1;
-            int pos_min = max(1, idx_falla - MAX_POS);
+            int pos_min = (MAX_POS > 0) ? max(1, idx_falla - MAX_POS) : 1;
+            if (MAX_POS <= 0)
+                for (int k = idx_falla - 1; k >= 1; --k) {
+                    int id = solucion_actual[r_idx].secuencia[k].nodo_id;
+                    if (mapa[id].es_estacion || mapa[id].es_deposito) { pos_min = k + 1; break; }
+                }
 
             for (int p = idx_falla - 1; p >= pos_min; --p) {
-                for (int s : estaciones) {
+                for (int k = 0; k < n_est; ++k) {
+                    int s = ests_ord[k];
                     solucion_actual[r_idx].secuencia.insert(solucion_actual[r_idx].secuencia.begin() + p, { s, 0, 0, 0, 0 });
                     if (solucion_actual[r_idx].calcular_metricas(mapa, matriz_dist, CAP_BATT, CAP_CARGA, R_CARGA, R_CONSUMO, ID_DEPOSITO) == 0) {
                         if (solucion_actual[r_idx].distancia_total < mejor_dist) {
@@ -228,7 +475,7 @@ void ALNS_EVRPTW::evaluar_y_aceptar(vector<Ruta>& backup, int op_rem, int op_ins
     if (tipo == 0) solucion_actual = backup;
     if (tipo > 0) {
         registrar_rutas_en_pool(solucion_actual);
-        double premio = (tipo == 1) ? 25 : (tipo == 2) ? 20 : 9;
+        double premio = (tipo == 1) ? config.sigma1 : (tipo == 2) ? config.sigma2 : config.sigma3;
         if (op_rem != -1) scores_rem[op_rem] += premio;
         if (op_ins != -1) scores_ins[op_ins] += premio;
         if (op_sr != -1) scores_sr[op_sr] += premio;

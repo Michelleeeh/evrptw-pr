@@ -11,7 +11,7 @@ using namespace std;
 
 void ALNS_EVRPTW::random_route_removal(vector<int>& fuera) {
     if (solucion_actual.size() <= 1) return;
-    double proporcion = 0.1 + dist_01(rng) * 0.3;
+    double proporcion = 0.1 + dist_01(rng) * (config.m_r - 0.1);
     int rutas_a_remover = max(1, (int)(solucion_actual.size() * proporcion));
     for (int i = 0; i < rutas_a_remover; i++) {
         if (solucion_actual.size() <= 1) break;
@@ -27,7 +27,7 @@ void ALNS_EVRPTW::random_route_removal(vector<int>& fuera) {
 
 void ALNS_EVRPTW::greedy_route_removal(vector<int>& fuera) {
     if (solucion_actual.size() <= 1) return;
-    double proporcion = 0.1 + dist_01(rng) * 0.3;
+    double proporcion = 0.1 + dist_01(rng) * (config.m_r - 0.1);
     int rutas_a_remover = max(1, (int)(solucion_actual.size() * proporcion));
 
     vector<pair<int, int>> conteo_rutas;
@@ -133,6 +133,23 @@ void ALNS_EVRPTW::customer_succeding_station(vector<int>& fuera, int q) {
 
 void ALNS_EVRPTW::zone_removal(vector<int>& fuera, int q) {
     if (solucion_actual.empty()) return;
+
+    // Version del paper: una zona al azar de la cuadricula y se remueven todos
+    // sus clientes (acotado a q).
+    if (config.zonas_por_cuadricula) {
+        int z = zona_aleatoria_no_vacia();
+        if (z == -1) return;
+        vector<int> en_zona;
+        for (const auto& r : solucion_actual)
+            for (const auto& p : r.secuencia)
+                if (!mapa[p.nodo_id].es_estacion && !mapa[p.nodo_id].es_deposito && zona_de(p.nodo_id) == z)
+                    en_zona.push_back(p.nodo_id);
+        shuffle(en_zona.begin(), en_zona.end(), rng);
+        for (int i = 0; i < (int)en_zona.size() && i < q; ++i) fuera.push_back(en_zona[i]);
+        actualizar_rutas_post_remocion(fuera);
+        return;
+    }
+
     vector<pair<double, double>> centroides(solucion_actual.size(), { 0.0, 0.0 });
     vector<int> num_clientes_ruta(solucion_actual.size(), 0);
 

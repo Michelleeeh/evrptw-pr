@@ -362,3 +362,10 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /instancias2/r112_21.txt
+
+# Ejecutables generados por el Makefile
+/alns
+/alns_verificar
+/tests/test_equivalencia
+/tests/test_redistribucion
+/tests/test_politica_carga

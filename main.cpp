@@ -23,6 +23,7 @@
 #include <filesystem>
 #include <algorithm>
 #include <limits>
+#include <cstdlib>
 
 #include "Nodo.h"
 #include "ConfigALNS.h"
@@ -32,7 +33,7 @@
 using namespace std;
 namespace fs = std::filesystem;
 
-int main() {
+int main(int argc, char** argv) {
     // Carpetas de entrada (instancias) y salida (resultados en CSV).
     string carpeta_instancias = "./instancias/";
     string carpeta_salida = "./resultados/";
@@ -46,17 +47,37 @@ int main() {
     // los valores por defecto.
     vector<ConfigALNS> variantes;
 
-    ConfigALNS sin_frvcp;
-    sin_frvcp.nombre_variante = "sin_frvcp";
-    sin_frvcp.usar_frvcp_en_final = false;
-    sin_frvcp.usar_frvcp_en_pool = false;
-    variantes.push_back(sin_frvcp);
+    //ConfigALNS sin_frvcp;
+    //sin_frvcp.nombre_variante = "sin_frvcp";
+    //sin_frvcp.usar_frvcp_en_final = false;
+    //sin_frvcp.usar_frvcp_en_pool = false;
+    //variantes.push_back(sin_frvcp);
 
-    //ConfigALNS con_frvcp;
-    //con_frvcp.nombre_variante = "con_frvcp";
-    //con_frvcp.usar_frvcp_en_final = true;
-    //con_frvcp.usar_frvcp_en_pool = true;
-    //variantes.push_back(con_frvcp);
+    // Variante "paper": el algoritmo original mas las piezas del metodo de
+    // Keskin & Catay que faltaban (redistribucion de carga, inserciones por
+    // tiempo, regret-3, busqueda en todas las rutas, parametros de la Tabla
+    // A.2). Es la que mejor replica los resultados publicados. Ver CAMBIOS.md.
+    ConfigALNS paper;
+    paper.nombre_variante = "paper";
+    paper.usar_frvcp_en_final = true;
+    paper.usar_frvcp_en_pool = true;
+    paper.configurar_como_paper();
+    // configurar_como_paper() deja todo como lo describe el paper, incluida la
+    // politica de carga 3 (ver CAMBIOS.md). Para volver a un comportamiento
+    // concreto del codigo original, sobreescribir aqui el campo correspondiente
+    // de ConfigALNS; p. ej.:
+    //   paper.max_posiciones_estacion = 5;   // original: solo 5 posiciones atras (paper: 0 = hasta el punto de carga anterior)
+    //   paper.politica_carga = 1;            // original + redistribucion tras fallo (paper: 3)
+    //   paper.evaluar_todas_las_rutas = false; // ~2x mas rapido, sin perdida medida
+    variantes.push_back(paper);
+
+    // Variante original (comportamiento identico al codigo previo a la
+    // optimizacion, solo mas rapido). Descomentar para comparar.
+    // ConfigALNS con_frvcp;
+    // con_frvcp.nombre_variante = "con_frvcp";
+    // con_frvcp.usar_frvcp_en_final = true;
+    // con_frvcp.usar_frvcp_en_pool = true;
+    // variantes.push_back(con_frvcp);
 
     // Semillas aleatorias con las que se repetira cada variante, para
     // poder promediar/comparar resultados entre corridas independientes.
@@ -90,7 +111,16 @@ int main() {
     }
 
     int seleccion = 0;
-    while (true) {
+    int iteraciones_cli = 25000;
+    if (argc >= 2) {
+        // Modo no interactivo: ./alns <instancia> [iteraciones] [semilla...]
+        for (size_t i = 0; i < archivos_disponibles.size(); ++i)
+            if (archivos_disponibles[i].stem().string() == argv[1]) seleccion = (int)i + 1;
+        if (seleccion == 0) { cerr << "[!] Instancia no encontrada: " << argv[1] << endl; return 1; }
+        if (argc >= 3) iteraciones_cli = atoi(argv[2]);
+        if (argc >= 4) { semillas.clear(); for (int a = 3; a < argc; ++a) semillas.push_back((unsigned)atoi(argv[a])); }
+    }
+    while (seleccion == 0) {
         cout << "\nSeleccione el numero de la instancia a ejecutar (1-"
              << archivos_disponibles.size() << "): ";
         if (cin >> seleccion && seleccion >= 1 && seleccion <= (int)archivos_disponibles.size()) {
@@ -136,7 +166,7 @@ int main() {
 
                 ALNS_EVRPTW alns(mapa, cc, cb, rc, rcons, config);
                 auto start_time = chrono::high_resolution_clock::now();
-                alns.ejecutar(25000, nombre_instancia, carpeta_instancia);
+                alns.ejecutar(iteraciones_cli, nombre_instancia, carpeta_instancia);
                 auto end_time = chrono::high_resolution_clock::now();
                 chrono::duration<double> duration = end_time - start_time;
 
