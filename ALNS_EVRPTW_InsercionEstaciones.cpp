@@ -12,19 +12,31 @@ void ALNS_EVRPTW::greedy_station_insertion() {
     for (auto& ruta : solucion_actual) {
         auto& seq = ruta.secuencia;
         for (int i = 1; i < (int)seq.size(); ++i) {
-            if (seq[i].llegada_bateria >= 0) continue;
-            double best = 1e18;
-            int best_s = -1;
-            for (int s : estaciones) {
-                seq.insert(seq.begin() + i, { s,0,0,0,0 });
-                if (ruta.calcular_metricas(mapa, matriz_dist, CAP_BATT, CAP_CARGA, R_CARGA, R_CONSUMO, ID_DEPOSITO) == 0) {
-                    if (ruta.distancia_total < best) { best = ruta.distancia_total; best_s = s; }
+            if (seq[i].llegada_bateria >= -EPS_BATERIA) continue;
+            // Paper (GSI): mejor estacion en el arco del fallo; si no cabe
+            // ninguna, intentar los arcos anteriores hasta el punto de carga.
+            int pos_min = i;
+            if (config.gsi_retrocede_arcos)
+                for (int k = i - 1; k >= 1; --k) {
+                    int id = seq[k].nodo_id;
+                    if (mapa[id].es_estacion || mapa[id].es_deposito) { pos_min = k + 1; break; }
+                    pos_min = k;
                 }
-                seq.erase(seq.begin() + i);
-            }
-            if (best_s != -1) {
-                seq.insert(seq.begin() + i, { best_s,0,0,0,0 });
-                ruta.calcular_metricas(mapa, matriz_dist, CAP_BATT, CAP_CARGA, R_CARGA, R_CONSUMO, ID_DEPOSITO);
+            for (int p = i; p >= pos_min; --p) {
+                double best = 1e18;
+                int best_s = -1;
+                for (int s : estaciones) {
+                    seq.insert(seq.begin() + p, { s,0,0,0,0 });
+                    if (ruta.calcular_metricas(mapa, matriz_dist, CAP_BATT, CAP_CARGA, R_CARGA, R_CONSUMO, ID_DEPOSITO) == 0) {
+                        if (ruta.distancia_total < best) { best = ruta.distancia_total; best_s = s; }
+                    }
+                    seq.erase(seq.begin() + p);
+                }
+                if (best_s != -1) {
+                    seq.insert(seq.begin() + p, { best_s,0,0,0,0 });
+                    ruta.calcular_metricas(mapa, matriz_dist, CAP_BATT, CAP_CARGA, R_CARGA, R_CONSUMO, ID_DEPOSITO);
+                    break;
+                }
             }
         }
     }
@@ -38,7 +50,7 @@ void ALNS_EVRPTW::greedy_station_insertion_comparison() {
             if (ruta.violacion_bateria <= 1e-5) break;
             int idx_falla = -1;
             for (int i = 1; i < (int)seq.size(); ++i) {
-                if (seq[i].llegada_bateria < 0) { idx_falla = i; break; }
+                if (seq[i].llegada_bateria < -EPS_BATERIA) { idx_falla = i; break; }
             }
             if (idx_falla == -1) break;
             double mejor_dist = numeric_limits<double>::max();
@@ -68,7 +80,7 @@ void ALNS_EVRPTW::best_station_insertion() {
             for (int i = 1; i < (int)seq.size(); ++i) {
                 int id_previo = seq[i - 1].nodo_id;
                 if (mapa[id_previo].es_estacion || mapa[id_previo].es_deposito) idx_ultimo_punto_carga = i - 1;
-                if (seq[i].llegada_bateria < 0) { idx_falla = i; break; }
+                if (seq[i].llegada_bateria < -EPS_BATERIA) { idx_falla = i; break; }
             }
             if (idx_falla == -1) break;
             double best_dist = numeric_limits<double>::max();

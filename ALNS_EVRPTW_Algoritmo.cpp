@@ -67,12 +67,16 @@ void ALNS_EVRPTW::ejecutar(int iteraciones, string nombre_instancia, string carp
                 else greedy_route_removal(fuera_sub);
                 if (fuera_sub.empty()) continue;
 
-                op_ins = seleccionar_operador(pesos_ins); usos_ins[op_ins]++;
+                op_ins = seleccionar_operador(pesos_ins);
+                if (op_ins == 5 && !config.usar_regret3) op_ins = 2;
+                if (op_ins == 1 && !config.usar_greedy_con_ruido) op_ins = 0;
+                usos_ins[op_ins]++;
                 if (op_ins == 0) greedy_insertion(fuera_sub, false);
                 else if (op_ins == 1) greedy_insertion(fuera_sub, true);
-                else if (op_ins == 2) regret_insertion(fuera_sub);
+                else if (op_ins == 2) regret_insertion(fuera_sub, 2);
                 else if (op_ins == 3) time_based_insertion(fuera_sub);
-                else zone_insertion(fuera_sub);
+                else if (op_ins == 4) zone_insertion(fuera_sub);
+                else regret_insertion(fuera_sub, 3);
                 evaluar_y_aceptar(backup_sub, op_rem, op_ins, -1, -1, i);
             }
         }
@@ -93,10 +97,15 @@ void ALNS_EVRPTW::ejecutar(int iteraciones, string nombre_instancia, string carp
             else if (op_rem == 3) shaw_removal(fuera, q);
             else if (op_rem == 6) customer_preceding_station(fuera, q);
             else if (op_rem == 7) customer_succeding_station(fuera, q);
-            else zone_removal(fuera, q);
+            else if (op_rem == 8) zone_removal(fuera, q);
+            else if (op_rem == 9) shaw_removal_pesos(fuera, q, 1, 0, 0, 0);   // Proximity-Based
+            else if (op_rem == 10) shaw_removal_pesos(fuera, q, 0, 0, 0, 1);  // Demand-Based
+            else shaw_removal_pesos(fuera, q, 0, 1, 0, 0);                    // Time-Based
 
             op_ins = seleccionar_operador(pesos_ins);
-            if (!config.usar_regret_insertion && op_ins == 2) op_ins = 0;
+            if (op_ins == 5 && !config.usar_regret3) op_ins = 2;
+            if (op_ins == 1 && !config.usar_greedy_con_ruido) op_ins = 0;
+            if (!config.usar_regret_insertion && (op_ins == 2 || op_ins == 5)) op_ins = 0;
             usos_ins[op_ins]++;
 
             bool hay_violacion_bateria = false;
@@ -107,9 +116,10 @@ void ALNS_EVRPTW::ejecutar(int iteraciones, string nombre_instancia, string carp
 
             if (op_ins == 0) greedy_insertion(fuera, false);
             else if (op_ins == 1) greedy_insertion(fuera, true);
-            else if (op_ins == 2) regret_insertion(fuera);
+            else if (op_ins == 2) regret_insertion(fuera, 2);
             else if (op_ins == 3) time_based_insertion(fuera);
-            else zone_insertion(fuera);
+            else if (op_ins == 4) zone_insertion(fuera);
+            else regret_insertion(fuera, 3);
         }
 
         evaluar_y_aceptar(backup, op_rem, op_ins, op_sr, op_si, i);
@@ -157,10 +167,28 @@ void ALNS_EVRPTW::ejecutar(int iteraciones, string nombre_instancia, string carp
         cout << "  Rutas mejoradas en mejor_solucion: " << frvcp_sol
              << " | Nueva distancia: " << obtener_distancia(mejor_solucion) << endl;
     }
+    // Asegurar que las rutas de mejor_solucion estan en el pool antes del
+    // set-covering, para que el warm-start pueda encontrarlas. Algunas
+    // pueden haberse perdido por el limite K_VARIANTES_POR_GRUPO.
+    registrar_rutas_en_pool(mejor_solucion);
+
     cout << "Pool de rutas acumuladas: " << pool_rutas.size() << endl;
     if (config.usar_frvcp_en_pool) {
         int frvcp_pool = optimizar_pool_con_frvcp();
         cout << "  Rutas mejoradas en pool: " << frvcp_pool << endl;
+    }
+
+    // Exportar el pool para poder resolver el set-covering fuera del programa
+    // (p. ej. con OR-Tools desde Python si el binario se compilo sin el).
+    {
+        string carpeta_pool = "./resultados/" + nombre_instancia + "/";
+        ofstream fp(carpeta_pool + "pool_" + nombre_instancia + ".csv");
+        fp << "distancia,secuencia\n";
+        for (const auto& pr : pool_rutas) {
+            fp << fixed << setprecision(6) << pr.distancia << ",";
+            for (size_t k = 0; k < pr.secuencia_completa.size(); ++k) fp << (k ? " " : "") << pr.secuencia_completa[k].nodo_id;
+            fp << "\n";
+        }
     }
 
     vector<Ruta> sol_matheuristica = resolver_set_covering_cpsat();

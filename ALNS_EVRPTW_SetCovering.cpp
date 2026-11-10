@@ -156,6 +156,40 @@ vector<Ruta> ALNS_EVRPTW::resolver_set_covering_cpsat(double tiempo_limite_fase1
         }
         };
 
+    // --- Warm-start: mapear mejor_solucion ALNS a rutas del pool ---
+    // Para cada ruta de la mejor solucion ALNS, busca la ruta del pool
+    // con el mismo conjunto de clientes y menor distancia para usarla
+    // como hint en ambas fases del solver.
+    vector<bool> hint_alns(n, false);
+    int hint_alns_count = 0;
+    {
+        for (const auto& ruta : mejor_solucion) {
+            if (ruta.violacion_tiempo > 1e-5 || ruta.violacion_bateria > 1e-5
+                || ruta.violacion_capacidad > 1e-5) continue;
+            vector<int> clientes;
+            for (const auto& p : ruta.secuencia) {
+                if (!mapa[p.nodo_id].es_estacion && !mapa[p.nodo_id].es_deposito)
+                    clientes.push_back(p.nodo_id);
+            }
+            if (clientes.empty()) continue;
+            sort(clientes.begin(), clientes.end());
+
+            int best_j = -1;
+            double best_dist = numeric_limits<double>::max();
+            for (int j = 0; j < n; ++j) {
+                if (hint_alns[j]) continue; // ya asignada a otra ruta
+                const auto& pr = pool_rutas[rutas_validas[j]];
+                if (pr.clientes == clientes && pr.distancia < best_dist) {
+                    best_dist = pr.distancia;
+                    best_j = j;
+                }
+            }
+            if (best_j != -1) { hint_alns[best_j] = true; hint_alns_count++; }
+        }
+        cout << "  [cpsat] Warm-start: " << hint_alns_count << "/"
+             << mejor_solucion.size() << " rutas ALNS mapeadas al pool" << endl;
+    }
+
     // ---------- FASE 1: minimizar numero de vehiculos ----------
     CpModelBuilder modelo1;
     vector<BoolVar> x1;
@@ -164,6 +198,10 @@ vector<Ruta> ALNS_EVRPTW::resolver_set_covering_cpsat(double tiempo_limite_fase1
     LinearExpr num_rutas1;
     for (int j = 0; j < n; ++j) num_rutas1 += x1[j];
     modelo1.Minimize(num_rutas1);
+
+    // Warm-start fase 1 con la solucion ALNS.
+    for (int j = 0; j < n; ++j)
+        modelo1.AddHint(x1[j], hint_alns[j] ? int64_t{1} : int64_t{0});
 
     Model m1;
     SatParameters params1;
@@ -191,14 +229,36 @@ vector<Ruta> ALNS_EVRPTW::resolver_set_covering_cpsat(double tiempo_limite_fase1
     for (int j = 0; j < n; ++j) num_rutas2 += x2[j];
     modelo2.AddLessOrEqual(num_rutas2, cota_vehiculos);
 
-    // Warm start: le damos a fase 2 la misma combinacion de rutas que encontro
-    // fase 1 como punto de partida. Sin esto, encontrar una solucion factible
-    // con el numero EXACTO de vehiculos (sin holgura) puede ser mucho mas dificil
-    // que la fase 1 (que solo necesitaba llegar a ese minimo, no acotarlo por
-    // arriba), y el solver puede agotar el tiempo sin hallar ninguna solucion
-    // (status UNKNOWN), lo cual el codigo trataba como infactible.
-    for (int j = 0; j < n; ++j) {
-        modelo2.AddHint(x2[j], SolutionBooleanValue(resp1, x1[j]) ? int64_t{ 1 } : int64_t{ 0 });
+    // Warm-start fase 2: elegir la mejor solucion de partida.
+    // Si la solucion ALNS cabe en la cota de vehiculos, compararla con la
+    // de fase 1 y usar la de menor distancia como hint. Esto es clave porque
+    // fase 1 optimiza vehiculos (no distancia), asi que su solucion puede
+    // tener distancia mucho peor que la del ALNS.
+    bool usar_alns_fase2 = false;
+    if (hint_alns_count > 0 && (int)mejor_solucion.size() <= cota_vehiculos) {
+        // Calcular distancia del hint ALNS (solo las rutas mapeadas al pool).
+        double dist_hint_alns = 0;
+        for (int j = 0; j < n; ++j) {
+            if (hint_alns[j]) dist_hint_alns += pool_rutas[rutas_validas[j]].distancia;
+        }
+        // Calcular distancia del hint fase 1.
+        double dist_hint_f1 = 0;
+        for (int j = 0; j < n; ++j) {
+            if (SolutionBooleanValue(resp1, x1[j]))
+                dist_hint_f1 += pool_rutas[rutas_validas[j]].distancia;
+        }
+        usar_alns_fase2 = (hint_alns_count == (int)mejor_solucion.size())
+                          && (dist_hint_alns < dist_hint_f1);
+    }
+
+    if (usar_alns_fase2) {
+        for (int j = 0; j < n; ++j)
+            modelo2.AddHint(x2[j], hint_alns[j] ? int64_t{1} : int64_t{0});
+        cout << "  [cpsat] Warm-start fase 2: solucion ALNS (mejor distancia)" << endl;
+    } else {
+        for (int j = 0; j < n; ++j)
+            modelo2.AddHint(x2[j], SolutionBooleanValue(resp1, x1[j]) ? int64_t{1} : int64_t{0});
+        cout << "  [cpsat] Warm-start fase 2: solucion fase 1" << endl;
     }
 
     const int64_t FACTOR = 1000;

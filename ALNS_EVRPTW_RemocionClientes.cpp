@@ -83,6 +83,10 @@ void ALNS_EVRPTW::worst_time_removal(vector<int>& fuera, int q) {
 }
 
 void ALNS_EVRPTW::shaw_removal(vector<int>& fuera, int q) {
+    shaw_removal_pesos(fuera, q, 5.0, 13.0, 0.15, 4.0);
+}
+
+void ALNS_EVRPTW::shaw_removal_pesos(vector<int>& fuera, int q, double phi_1, double phi_2, double phi_3, double phi_4) {
     vector<int> clientes_actuales;
     map<int, int> ruta_de_cliente;
 
@@ -97,7 +101,7 @@ void ALNS_EVRPTW::shaw_removal(vector<int>& fuera, int q) {
     }
     if (clientes_actuales.empty()) return;
 
-    double phi_1 = 5.0, phi_2 = 13.0, phi_3 = 0.15, phi_4 = 4.0, eta = 12.0;
+    const double eta = 12.0;
     int idx_semilla = rng() % clientes_actuales.size();
     fuera.push_back(clientes_actuales[idx_semilla]);
     clientes_actuales.erase(clientes_actuales.begin() + idx_semilla);
@@ -123,4 +127,35 @@ void ALNS_EVRPTW::shaw_removal(vector<int>& fuera, int q) {
         clientes_actuales.erase(remove(clientes_actuales.begin(), clientes_actuales.end(), cliente_elegido), clientes_actuales.end());
     }
     actualizar_rutas_post_remocion(fuera);
+}
+
+// ---------------------------------------------------------------------------
+//  Cuadricula cartesiana de zonas (paper: n_z = 25). Se usa en zone_removal y
+//  zone_insertion cuando config.zonas_por_cuadricula esta activo.
+// ---------------------------------------------------------------------------
+int ALNS_EVRPTW::zona_de(int nodo) const {
+    static double xmin = 1e18, xmax = -1e18, ymin = 1e18, ymax = -1e18;
+    if (xmin > xmax) {
+        for (const auto& nd : mapa) if (!nd.es_estacion && !nd.es_deposito) {
+            xmin = min(xmin, nd.x); xmax = max(xmax, nd.x); ymin = min(ymin, nd.y); ymax = max(ymax, nd.y);
+        }
+        xmax += 1e-9; ymax += 1e-9;
+    }
+    int lado = max(1, (int)lround(sqrt((double)config.n_zonas)));
+    int cx = min(lado - 1, max(0, (int)((mapa[nodo].x - xmin) / (xmax - xmin) * lado)));
+    int cy = min(lado - 1, max(0, (int)((mapa[nodo].y - ymin) / (ymax - ymin) * lado)));
+    return cy * lado + cx;
+}
+
+int ALNS_EVRPTW::zona_aleatoria_no_vacia() {
+    vector<int> zonas;
+    vector<bool> vista(config.n_zonas + 1, false);
+    for (const auto& r : solucion_actual)
+        for (const auto& p : r.secuencia)
+            if (!mapa[p.nodo_id].es_estacion && !mapa[p.nodo_id].es_deposito) {
+                int z = zona_de(p.nodo_id);
+                if (z < (int)vista.size() && !vista[z]) { vista[z] = true; zonas.push_back(z); }
+            }
+    if (zonas.empty()) return -1;
+    return zonas[rng() % zonas.size()];
 }

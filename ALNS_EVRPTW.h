@@ -36,6 +36,11 @@ class ALNS_EVRPTW {
     std::vector<Nodo> mapa;
     std::vector<std::vector<double>> matriz_dist;
     std::vector<int> estaciones;
+    // Para cada nodo, lista de estaciones ordenadas por cercania (precalculada).
+    std::vector<std::vector<int>> estaciones_cercanas;
+    // Cambio 3: para cada arco (i,j), las k estaciones s que menos desvio
+    // anaden (ordenadas por d(i,s)+d(s,j)).
+    std::vector<std::vector<std::vector<int>>> estaciones_candidatas_arco;
     ConfigALNS config;
     double T;
     double CAP_CARGA, CAP_BATT, R_CARGA, R_CONSUMO;
@@ -46,13 +51,16 @@ class ALNS_EVRPTW {
 
     // Pesos, puntajes y contadores de uso para la seleccion adaptativa
     // (tipo ruleta) de cada familia de operadores.
-    std::vector<double> pesos_rem = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
-    std::vector<double> scores_rem = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-    std::vector<int> usos_rem = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    std::vector<double> pesos_rem = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
+    std::vector<double> scores_rem = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    std::vector<int> usos_rem = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
-    std::vector<double> pesos_ins = { 1.0, 1.0, 1.0, 1.0, 1.0 };
-    std::vector<double> scores_ins = { 0, 0, 0, 0, 0 };
-    std::vector<int> usos_ins = { 0, 0, 0, 0, 0 };
+    std::vector<double> pesos_ins = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
+    std::vector<double> scores_ins = { 0, 0, 0, 0, 0, 0 };
+    std::vector<int> usos_ins = { 0, 0, 0, 0, 0, 0 };
+    // true mientras corre un operador con criterio de tiempo de ruta:
+    // probar_insercion devuelve incremento de tiempo en vez de distancia.
+    bool modo_costo_tiempo = false;
 
     std::vector<double> pesos_sr = { 1.0, 1.0, 1.0, 1.0 };
     std::vector<double> scores_sr = { 0, 0, 0, 0 };
@@ -65,7 +73,14 @@ class ALNS_EVRPTW {
     // Cache de costos de insercion por (cliente, ruta), para evitar
     // recalcular inserciones que no cambiaron entre iteraciones.
     std::vector<std::vector<double>> cache_costos;
-    Ruta buffer_insercion;
+    // Cambio 1: posicion de insercion asociada al costo cacheado, para
+    // poder reutilizar la entrada sin volver a evaluar la ruta.
+    std::vector<std::vector<int>> cache_pos;
+    // Cambio 1 (solo para greedy con ruido): incrementos de costo por
+    // posicion (indice p-1) de cada par (cliente, ruta) cacheado, para poder
+    // aplicar ruido fresco por posicion en cada vuelta exactamente igual
+    // que el codigo original, sin reevaluar la ruta.
+    std::vector<std::vector<std::vector<double>>> cache_incs;
     std::mt19937 rng;
     std::uniform_real_distribution<double> dist_01;
 
@@ -102,6 +117,10 @@ public:
     /// vectores desde cero.
     void reset_cache(const std::vector<int>& fuera, int num_rutas);
 
+    /// Cambio 1: invalida la columna `r` de la cache para todos los clientes
+    /// pendientes (la ruta r acaba de cambiar).
+    void invalidar_cache_ruta(const std::vector<int>& fuera, int r);
+
     // ------------------------------------------------------------------
     //  4. OPERADORES
     // ------------------------------------------------------------------
@@ -120,6 +139,13 @@ public:
     void customer_preceding_station(std::vector<int>& fuera, int q);
     void customer_succeding_station(std::vector<int>& fuera, int q);
     void zone_removal(std::vector<int>& fuera, int q);
+    /// Shaw con pesos arbitrarios (phi_1..phi_4). Proximity/Demand/Time-Based
+    /// Removal del paper son casos particulares.
+    void shaw_removal_pesos(std::vector<int>& fuera, int q, double p1, double p2, double p3, double p4);
+    /// Zona de la cuadricula (0..n_zonas-1) a la que pertenece un nodo.
+    int zona_de(int nodo) const;
+    /// Elige al azar una zona de la cuadricula con al menos un cliente ruteado.
+    int zona_aleatoria_no_vacia();
 
     // --- 4.4 Operadores de remocion de estaciones de recarga ---
     void random_station_removal(std::vector<int>& fuera, int q);
@@ -129,7 +155,7 @@ public:
 
     // --- 4.5 Operadores de insercion de clientes ---
     void greedy_insertion(std::vector<int>& fuera, bool con_ruido = false);
-    void regret_insertion(std::vector<int>& fuera);
+    void regret_insertion(std::vector<int>& fuera, int k = 2);
     void time_based_insertion(std::vector<int>& fuera);
     void zone_insertion(std::vector<int>& fuera);
 
@@ -169,8 +195,8 @@ public:
     std::vector<Ruta> resolver_greedy_set_covering();
 
     /// Resuelve el set-covering sobre pool_rutas con CP-SAT en dos fases.
-    std::vector<Ruta> resolver_set_covering_cpsat(double tiempo_limite_fase1 = 90.0,
-        double tiempo_limite_fase2 = 60.0);
+    std::vector<Ruta> resolver_set_covering_cpsat(double tiempo_limite_fase1 = 180.0,
+        double tiempo_limite_fase2 = 120.0);
 
     /// Devuelve la distancia total recorrida por todas las rutas de `sol`.
     double obtener_distancia(const std::vector<Ruta>& sol) const;
@@ -185,7 +211,15 @@ private:
 
     void inicializar_solucion();
     void crear_nueva_ruta(int nodo_id);
+    /// Evalua todas las rutas (no solo las candidatas) para todos los
+    /// clientes pendientes y aplica la mejor insercion factible. Devuelve
+    /// false si no existe ninguna (entonces si corresponde abrir ruta).
+    bool insertar_en_cualquier_ruta(std::vector<int>& fuera);
     double probar_insercion(int r_idx, int pos, int u);
+    /// Cambio 1: devuelve el mejor costo de insertar `u` en la ruta `r` y la
+    /// posicion asociada, usando la cache (cliente, ruta) cuando es valida.
+    /// Devuelve max() si no hay insercion factible. No aplica ruido.
+    double mejor_insercion_en_ruta(int u, int r, int& mejor_pos, bool con_ruido = false);
     void reconstruir_indice_rutas();
     void registrar_rutas_en_pool(const std::vector<Ruta>& sol);
     std::vector<int> rutas_candidatas_para(int u);
